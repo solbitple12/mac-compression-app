@@ -63,12 +63,14 @@ BROTLI_COMMIT=028fb5a23661f123017c060daa546b55cf4bde29
 ZPAQ_VERSION=7.15
 ZPAQ_GIT=https://github.com/zpaq/zpaq
 ZPAQ_COMMIT=9ab539f644e364f0d92e2918b90ce2534c75653f
+# Bump when the zpaq patch changes, so cached builds are redone.
+ZPAQ_REVISION=2
 
 MINIZIP_VERSION=4.2.2
 MINIZIP_GIT=https://github.com/zlib-ng/minizip-ng
 MINIZIP_COMMIT=7b2387161c542fa9f427352dcdef76097d0d692b
 # Bump when a minizip patch changes, so cached builds are redone.
-MINIZIP_REVISION=2
+MINIZIP_REVISION=3
 
 ARCHS=(arm64 x86_64)
 UNIVERSAL_CMAKE=(
@@ -351,14 +353,15 @@ build_brotli() {
 # zpaq for ZPAQ. NOJIT: its JIT writes x86 code at run time, which doesn't run on
 # Apple silicon and would need an executable-memory entitlement on Intel.
 build_zpaq() {
-  built zpaq "$ZPAQ_VERSION" && return
+  built zpaq "$ZPAQ_VERSION-$ZPAQ_REVISION" && return
   local dir="$SRC/zpaq-$ZPAQ_VERSION"
   fetch_git "$ZPAQ_GIT" "$ZPAQ_VERSION" "$ZPAQ_COMMIT" "$dir"
+  patch -d "$dir" -p1 --quiet <"$PATCHES/zpaq-no-parent-dirs.patch"
   echo "Building zpaq $ZPAQ_VERSION"
   clang++ -arch arm64 -arch x86_64 -O3 -Dunix -DNOJIT -pthread -w \
     -o "$BIN/zpaq" "$dir/zpaq.cpp" "$dir/libzpaq.cpp"
   cp "$dir/COPYING" "$LICENSES/zpaq.txt"
-  stamp zpaq "$ZPAQ_VERSION"
+  stamp zpaq "$ZPAQ_VERSION-$ZPAQ_REVISION"
 }
 
 # minizip from minizip-ng, only for writing zstd inside ZIP (official 7-Zip reads

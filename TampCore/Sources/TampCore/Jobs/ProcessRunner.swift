@@ -51,19 +51,40 @@ public struct ProcessRunner: Sendable {
         process.standardError = errors
 
         let collector = OutputCollector(onLine: onOutputLine)
+        // Each pipe's handler calls run one after another, so once a pipe reports its
+        // end, everything it carried has been collected.
+        let drained = DispatchGroup()
+        drained.enter()
         output.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if data.isEmpty { handle.readabilityHandler = nil } else { collector.appendOutput(data) }
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                if collector.markEnded(.output) { drained.leave() }
+            } else {
+                collector.appendOutput(data)
+            }
         }
+        drained.enter()
         errors.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if data.isEmpty { handle.readabilityHandler = nil } else { collector.appendError(data) }
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                if collector.markEnded(.error) { drained.leave() }
+            } else {
+                collector.appendError(data)
+            }
         }
         let stopper = ProcessStopper(process: process, gracePeriod: terminationGracePeriod)
 
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                process.terminationHandler = { _ in continuation.resume() }
+        let pipesDrained = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
+                process.terminationHandler = { _ in
+                    // The helper can exit before its last output reaches Tamp. A grandchild
+                    // that inherited the pipes could hold them open, so don't wait forever.
+                    DispatchQueue.global().async {
+                        continuation.resume(returning: drained.wait(timeout: .now() + 5) == .success)
+                    }
+                }
                 do {
                     try process.run()
                 } catch {
@@ -83,10 +104,10 @@ public struct ProcessRunner: Sendable {
             stopper.stop()
         }
 
-        output.fileHandleForReading.readabilityHandler = nil
-        errors.fileHandleForReading.readabilityHandler = nil
-        if let rest = try? output.fileHandleForReading.readToEnd() { collector.appendOutput(rest) }
-        if let rest = try? errors.fileHandleForReading.readToEnd() { collector.appendError(rest) }
+        if !pipesDrained {
+            output.fileHandleForReading.readabilityHandler = nil
+            errors.fileHandleForReading.readabilityHandler = nil
+        }
         collector.flush()
 
         if stopper.wasStopped { throw CancellationError() }
@@ -144,10 +165,16 @@ final class OutputCollector: @unchecked Sendable {
     private static let errorLimit = 64 * 1024
     private static let lineBreaks: Set<UInt8> = [0x0A, 0x0D, 0x08]
 
+    enum Stream: Hashable {
+        case output
+        case error
+    }
+
     private let lock = NSLock()
     private let onLine: @Sendable (String) -> Void
     private var pending = Data()
     private var errorData = Data()
+    private var ended: Set<Stream> = []
 
     init(onLine: @escaping @Sendable (String) -> Void) {
         self.onLine = onLine
@@ -168,6 +195,11 @@ final class OutputCollector: @unchecked Sendable {
             return lines
         }
         emit(lines)
+    }
+
+    /// True the first time a stream reports its end, so the end is counted once.
+    func markEnded(_ stream: Stream) -> Bool {
+        lock.withLock { ended.insert(stream).inserted }
     }
 
     func appendError(_ data: Data) {

@@ -40,6 +40,7 @@ final class ArchivePlannerTests: XCTestCase {
         XCTAssertEqual(ArchiveDetector.format(of: try file("g", bytes: [0x04, 0x22, 0x4D, 0x18, 0])), .tarLz4)
         XCTAssertEqual(ArchiveDetector.format(of: try file("h", bytes: Array("LZIP".utf8) + [1])), .tarLz)
         XCTAssertEqual(ArchiveDetector.format(of: try file("j", bytes: ArchiveDetector.sevenZipSignature + [0, 4])), .sevenZip)
+        XCTAssertEqual(ArchiveDetector.format(of: try file("k", bytes: ZpaqEngine.signature + Array("zPQ".utf8))), .zpaq)
         // "BZh" needs a block size digit after it.
         XCTAssertNil(ArchiveDetector.format(of: try file("i", bytes: Array("BZhx".utf8))))
     }
@@ -59,9 +60,10 @@ final class ArchivePlannerTests: XCTestCase {
     }
 
     func testRegistryListsItsFormatsInPickerOrder() {
-        XCTAssertEqual(registry.availableFormats, [.zip, .sevenZip, .tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr])
+        XCTAssertEqual(registry.availableFormats, [.zip, .sevenZip, .tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr, .zpaq])
         XCTAssertEqual(registry.engine(for: .zip)?.format, .zip)
-        XCTAssertNil(registry.engine(for: .sevenZip))
+        XCTAssertEqual(registry.engine(for: .sevenZip)?.format, .sevenZip)
+        XCTAssertNil(registry.engine(for: .appleArchive))
     }
 
     func testTarFamilyArchivesOpenWithTheTarEngine() throws {
@@ -112,6 +114,7 @@ final class ArchivePlannerTests: XCTestCase {
         XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.tar.lz")), .tarLz)
         XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.tar.br")), .tarBr)
         XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.7Z")), .sevenZip)
+        XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.zpaq")), .zpaq)
         XCTAssertNil(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.zst")))
         XCTAssertNil(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.gz")))
         XCTAssertNil(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/.tar")))

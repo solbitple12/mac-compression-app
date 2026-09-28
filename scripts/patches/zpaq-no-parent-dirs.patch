@@ -1,0 +1,33 @@
+# Tamp: zpaq x drops ".." from stored names, so an archive cannot write outside the -to folder.
+--- a/zpaq.cpp
++++ b/zpaq.cpp
+@@ -1146,8 +1146,29 @@
+   return a+"/"+b;
+ }
+ 
++// Tamp: extraction never writes outside the -to folder, so ".." components
++// are dropped from stored names ("../x" becomes "x", "a/../b" becomes "a/b").
++static string drop_parent_dirs(const string& name) {
++  string out;
++  size_t start=0;
++  for (;;) {
++    size_t end=name.find('/', start);
++    const bool last=(end==string::npos);
++    if (last) end=name.size();
++    const string part=name.substr(start, end-start);
++    if (part!="..") {
++      out+=part;
++      if (!last) out+='/';
++    }
++    if (last) break;
++    start=end+1;
++  }
++  return out;
++}
++
+ // Rename name using tofiles[]
+ string Jidac::rename(string name) {
++  if (command=='x') name=drop_parent_dirs(name);
+   if (files.size()==0 && tofiles.size()>0)  // append prefix tofiles[0]
+     name=append_path(tofiles[0], name);
+   else {  // replace prefix files[i] with tofiles[i]
