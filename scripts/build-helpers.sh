@@ -693,8 +693,12 @@ build_lame() {
       # --disable-nasm: its x86 assembly won't build for arm64 anyway, and this
       # keeps both architectures on the same portable-C code path. --disable-decoder:
       # its own mpg123-based MP3 decoder (for --decode and the mp3x analyzer, not
-      # needed for encoding) needs libmpg123, which isn't installed here.
-      CC="clang -arch $arch" CFLAGS="-O2" ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
+      # needed for encoding) needs libmpg123, which isn't installed here. -include
+      # locale.h: configure's cross-compile detection of setlocale()/LC_CTYPE
+      # misses them (macOS has both), leaving frontend/parse.c using them without
+      # a declaration; force-including the header is simpler than chasing why
+      # autoconf's check failed under --host.
+      CC="clang -arch $arch" CFLAGS="-O2 -include locale.h" ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
         --disable-shared --enable-static --disable-nasm --disable-decoder >/dev/null
       make -j"$JOBS" >/dev/null
       make install >/dev/null
