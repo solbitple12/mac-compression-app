@@ -12,6 +12,7 @@ Work in progress. Phase 1 is being built in small steps.
 | --- | --- |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping |
+| `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner, safe temp-file output, error messages |
 | `.github/workflows/ci.yml` | Builds and tests `TampCore` on a macOS runner |
 
 ## Build and test
