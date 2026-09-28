@@ -2,8 +2,11 @@
 # Sourced by build-helpers.sh, bundle-helpers.sh, release.sh and CI, so the
 # list lives in one place.
 
+# The app's own helpers. build-helpers.sh also builds wvunpack, for the test
+# suite's independent WavPack round-trip check; it's never bundled into the app,
+# since Tamp only ever writes WavPack, never opens one.
 # shellcheck disable=SC2034
-TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac)
+TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac wavpack)
 
 # shellcheck disable=SC2034
 TAMP_LICENSES=(
@@ -21,4 +24,5 @@ TAMP_LICENSES=(
   mozjpeg.txt
   libwebp.txt
   flac.txt
+  wavpack.txt
 )

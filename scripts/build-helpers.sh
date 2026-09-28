@@ -522,6 +522,31 @@ build_flac() {
   stamp flac "$FLAC_VERSION"
 }
 
+# wavpack (encoder) and wvunpack (decoder, used only by the test suite's
+# independent round-trip check, not bundled into the app) for WavPack.
+build_wavpack() {
+  if built wavpack "$WAVPACK_VERSION" && built wvunpack "$WAVPACK_VERSION"; then
+    return
+  fi
+  local dir="$SRC/WavPack-$WAVPACK_VERSION"
+  fetch_git "$WAVPACK_GIT" "$WAVPACK_VERSION" "$WAVPACK_COMMIT" "$dir"
+  echo "Building WavPack $WAVPACK_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DBUILD_SHARED_LIBS=OFF -DWAVPACK_BUILD_PROGRAMS=ON -DWAVPACK_BUILD_DOCS=OFF \
+    -DWAVPACK_ENABLE_LEGACY_FORMAT=OFF -DWAVPACK_BUILD_WINAMP_PLUGIN=OFF \
+    -DWAVPACK_BUILD_COOLEDIT_PLUGIN=OFF -DWAVPACK_INSTALL_DOCS=OFF -DWAVPACK_INSTALL_CMAKE_MODULE=OFF >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target wavpack wvunpack >/dev/null
+  local wavpack_binary wvunpack_binary
+  wavpack_binary="$(find "$dir/out" -type f -name wavpack -perm +111 | head -1)"
+  wvunpack_binary="$(find "$dir/out" -type f -name wvunpack -perm +111 | head -1)"
+  [[ -n "$wavpack_binary" && -n "$wvunpack_binary" ]] || { echo "WavPack built but its binaries weren't found under $dir/out" >&2; exit 1; }
+  cp "$wavpack_binary" "$BIN/wavpack"
+  cp "$wvunpack_binary" "$BIN/wvunpack"
+  cp "$dir/COPYING" "$LICENSES/wavpack.txt"
+  stamp wavpack "$WAVPACK_VERSION"
+  stamp wvunpack "$WAVPACK_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -535,3 +560,4 @@ build_oxipng
 build_mozjpeg
 build_libwebp
 build_flac
+build_wavpack
