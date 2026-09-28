@@ -13,15 +13,20 @@ Work in progress. Phase 1 is being built in small steps.
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping |
 | `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner, safe temp-file output, error messages |
-| `.github/workflows/ci.yml` | Builds and tests `TampCore` on a macOS runner |
+| `scripts/build-helpers.sh` | Downloads, verifies and builds the bundled helper tools as universal binaries |
+| `.github/workflows/ci.yml` | Builds the helpers, then builds and tests `TampCore` on a macOS runner |
 
 ## Build and test
 
 Requires Xcode 16 or later on macOS 14 or later.
 
 ```sh
-swift test --package-path TampCore
+scripts/build-helpers.sh
+TAMP_HELPERS_DIR="$PWD/build/helpers/bin" swift test --package-path TampCore
 ```
+
+The engine tests run the real helpers and are skipped when `TAMP_HELPERS_DIR` doesn't
+point at them. CI sets `TAMP_REQUIRE_HELPERS=1`, which turns that skip into a failure.
 
 ## Speed steps
 
@@ -41,5 +46,13 @@ Memory figures in the slider hint are approximations until the Phase 2a benchmar
 
 ## Bundled components and licenses
 
-No third-party components are bundled yet. Each one will be listed here with its
-license as it is added.
+`scripts/build-helpers.sh` copies each component's license text into
+`build/helpers/licenses`. The app bundles those files next to the helpers.
+
+| Component | Version | Used for | License |
+| --- | --- | --- | --- |
+| [7-Zip](https://github.com/ip7z/7zip) (`7zz`) | 26.03 | ZIP now; 7Z and RAR extraction in Phase 2a | GNU LGPL 2.1, some code BSD 3-clause, unRAR code under the unRAR license restriction |
+
+7-Zip is built from the unmodified source release above, which also satisfies the
+LGPL's source-availability requirement. The unRAR restriction forbids using that code
+to recreate the RAR compression algorithm; Tamp only extracts RAR.

@@ -20,21 +20,32 @@ public enum SafeOutput {
         do {
             try await body(temporary)
             try Task.checkCancellation()
-            for _ in 0..<100 {
-                let target = availableURL(for: destination, fileExtension: fileExtension, fileManager: fileManager)
-                do {
-                    try commit(temporary, to: target)
-                    return target
-                } catch let error as POSIXError where error.code == .EEXIST {
-                    // Another file took the name between the check and the rename; try the next one.
-                    continue
-                }
-            }
-            throw POSIXError(.EEXIST)
+            return try commitToAvailableName(temporary, preferring: destination, fileExtension: fileExtension, fileManager: fileManager)
         } catch {
             discard(temporary, fileManager: fileManager)
             throw error
         }
+    }
+
+    /// Moves a finished file or folder to the first free name based on `destination`.
+    /// - Returns: Where it ended up.
+    public static func commitToAvailableName(
+        _ source: URL,
+        preferring destination: URL,
+        fileExtension: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        for _ in 0..<100 {
+            let target = availableURL(for: destination, fileExtension: fileExtension, fileManager: fileManager)
+            do {
+                try commit(source, to: target)
+                return target
+            } catch let error as POSIXError where error.code == .EEXIST {
+                // Another file took the name between the check and the rename; try the next one.
+                continue
+            }
+        }
+        throw POSIXError(.EEXIST)
     }
 
     public static func temporaryURL(for destination: URL) -> URL {

@@ -4,8 +4,11 @@ public struct ZipParameters: Equatable, Sendable {
     public var level: Int
     public var threads: Int
 
+    /// Store uses the Copy method; every other step uses Deflate.
+    public var method: String { level == 0 ? "Copy" : "Deflate" }
+
     public var sevenZipArguments: [String] {
-        ["-tzip", "-mm=Deflate", "-mx=\(level)", "-mmt=\(threads)"]
+        ["-tzip", "-mm=\(method)", "-mx=\(level)", "-mmt=\(threads)"]
     }
 }
 

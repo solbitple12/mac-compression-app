@@ -7,6 +7,7 @@ public enum TampError: Error, Equatable, Sendable {
     case outOfMemory
     case permissionDenied(path: String?)
     case wrongPassword
+    case passwordRequired
     case corruptArchive
     case fileNotFound(path: String?)
     case helperMissing(name: String)
@@ -27,6 +28,8 @@ extension TampError: LocalizedError {
             "Tamp doesn't have permission to use \(Self.displayName(path) ?? "this location"). Allow it in System Settings > Privacy & Security, or choose another folder."
         case .wrongPassword:
             "The password is wrong."
+        case .passwordRequired:
+            "This archive is encrypted. Enter its password to open it."
         case .corruptArchive:
             "This archive is damaged and can't be read completely."
         case let .fileNotFound(path):
@@ -92,6 +95,10 @@ extension TampError {
         }
         if mentions("wrong password") {
             return .wrongPassword
+        }
+        // 7zz reports a password prompt that got no answer as a break (exit code 255).
+        if mentions("break signaled") {
+            return .passwordRequired
         }
         if mentions("permission denied", "operation not permitted", "access is denied") {
             return .permissionDenied(path: nil)

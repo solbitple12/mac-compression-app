@@ -47,6 +47,11 @@ final class ZipMappingTests: XCTestCase {
         XCTAssertEqual(parameters.sevenZipArguments, ["-tzip", "-mm=Deflate", "-mx=5", "-mmt=8"])
     }
 
+    func testStoreUsesCopyMethod() {
+        let parameters = mapping.parameters(for: .store, options: ArchiveOptions(threads: 1))
+        XCTAssertEqual(parameters.sevenZipArguments, ["-tzip", "-mm=Copy", "-mx=0", "-mmt=1"])
+    }
+
     func testHintKeepsZipExtensionOnEveryStep() {
         for step in SpeedStep.allCases {
             XCTAssertEqual(mapping.hint(for: step, options: ArchiveOptions(threads: 2)).outputExtension, "zip")
