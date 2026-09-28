@@ -374,7 +374,10 @@ final class StreamMonitor: @unchecked Sendable {
         self.progress = progress
     }
 
+    /// Also where a job paused by the resource monitor waits, between buffers.
     func checkCancellation() throws {
+        let flag = flag
+        flag.control?.waitWhilePaused(isCancelled: { flag.isCancelled })
         if flag.isCancelled { throw CancellationError() }
     }
 
@@ -391,8 +394,14 @@ final class StreamMonitor: @unchecked Sendable {
 }
 
 final class CancellationFlag: @unchecked Sendable {
+    /// The job's control, carried to the work's own thread, where task-locals don't reach.
+    let control: JobControl?
     private let lock = NSLock()
     private var cancelled = false
+
+    init(control: JobControl? = JobControl.current) {
+        self.control = control
+    }
 
     var isCancelled: Bool { lock.withLock { cancelled } }
 

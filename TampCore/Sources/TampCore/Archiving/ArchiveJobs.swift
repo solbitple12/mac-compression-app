@@ -28,17 +28,35 @@ public enum ArchiveJobs {
         engine: any ArchiveEngine,
         on queue: JobQueue,
         afterwards: Afterwards = Afterwards(),
+        estimate: Estimate? = nil,
+        history: EstimateHistory? = nil,
         willWrite: OutputFolderHandler? = nil
     ) async -> JobID {
         let subject = "\(ArchivePlanner.displayName(for: request.items)) as \(engine.format.title)"
-        return await queue.enqueue(title: "Compressing \(subject)", finishedTitle: "Compressed \(subject)", totalBytes: 0) { context in
+        // Checking takes about half as long again as compressing.
+        let planned = estimate.map { $0.likelySeconds * (afterwards.verifies ? 1.5 : 1) }
+        return await queue.enqueue(title: "Compressing \(subject)", finishedTitle: "Compressed \(subject)", totalBytes: 0,
+                                   initialEstimate: planned) { context in
             let inputBytes = InputSize.totalBytes(of: request.items)
             try Task.checkCancellation()
             // Checking reads everything again, so it counts as much as compressing.
             await context.setTotalBytes(afterwards.verifies ? 2 * inputBytes : inputBytes)
+            context.control.outputDirectory = request.destination.deletingLastPathComponent()
             willWrite?(request.destination.deletingLastPathComponent())
+            let started = ProcessInfo.processInfo.systemUptime
             let output = try await engine.compress(request, progress: context.progressHandler(totalBytes: inputBytes))
             await context.reportOutput(output)
+            if let history, request.volumeBytes == nil {
+                let method = engine.format.resolvedMethod(request.options.method)
+                history.append(HistoryRecord(
+                    format: engine.format, method: method, step: request.step, threads: request.options.threads,
+                    inputBytes: inputBytes, outputBytes: Estimator.size(of: output, fileManager: .default),
+                    estimatedSeconds: estimate.flatMap { $0.isRough ? nil : $0.likelySeconds },
+                    actualSeconds: ProcessInfo.processInfo.systemUptime - started,
+                    peakMemoryBytes: context.control.peakFootprintBytes,
+                    hintMemoryBytes: engine.hint(for: request.step, options: request.options).peakMemoryBytes
+                ))
+            }
             if afterwards.verifies {
                 try await ArchiveVerifier.verify(
                     output, items: request.items, password: request.password, extractor: engine,
@@ -73,6 +91,7 @@ public enum ArchiveJobs {
         let totalBytes = Int64((try? request.archive.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         let subject = ArchivePlanner.displayName(for: [request.archive])
         return await queue.enqueue(title: "Extracting \(subject)", finishedTitle: "Extracted \(subject)", totalBytes: totalBytes) { context in
+            context.control.outputDirectory = request.destinationDirectory
             willWrite?(request.destinationDirectory)
             let output = try await engine.extract(request, progress: context.progressHandler(totalBytes: totalBytes))
             await context.reportOutput(output)

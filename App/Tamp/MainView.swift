@@ -31,13 +31,28 @@ struct MainView: View {
             "Move the originals to the Trash after compressing?",
             isPresented: Binding(get: { model.isConfirmingTrash }, set: { model.isConfirmingTrash = $0 })
         ) {
-            Button("Compress, Then Move to Trash", role: .destructive) { model.start(trashConfirmed: true) }
+            Button("Compress, Then Move to Trash", role: .destructive) { model.approve(.trash) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("They go to the Trash only if the archive is written\(model.choice.verifies ? " and checks out" : ""). You can put them back from there.")
         }
         .sheet(item: Binding(get: { model.passwordRequest }, set: { if $0 == nil { model.answerPasswordRequest(nil) } })) { request in
             PasswordPrompt(request: request) { model.answerPasswordRequest($0) }
+        }
+        .sheet(item: Binding(get: { model.startQuestion }, set: { if $0 == nil { model.dismissStartQuestion() } })) { question in
+            StartQuestionView(question: question, model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.resourceStatus.isAwaitingAnswer }, set: { _ in })) {
+            PausedJobsView(model: model)
+                .interactiveDismissDisabled()
+        }
+        .alert(
+            "Tamp stopped to protect your Mac",
+            isPresented: Binding(get: { model.automaticStopSummary != nil }, set: { if !$0 { model.dismissAutomaticStopSummary() } })
+        ) {
+            Button("OK") { model.dismissAutomaticStopSummary() }
+        } message: {
+            Text(model.automaticStopSummary ?? "")
         }
     }
 
@@ -97,7 +112,8 @@ struct ArchiveSettingsView: View {
 
             if let hint = model.hint {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(hint.text)
+                    Text(model.hintText ?? hint.text)
+                        .accessibilityIdentifier("stepHint")
                     ForEach(hint.notes, id: \.self) { note in
                         Label(note, systemImage: "info.circle")
                             .foregroundStyle(.secondary)

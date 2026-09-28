@@ -15,6 +15,21 @@ struct JobListView: View {
                         .buttonStyle(.link)
                 }
             }
+            if model.activeJobCount > 0 {
+                ResourceBanner(status: model.resourceStatus)
+            }
+            if !model.unfinishedBatch.isEmpty {
+                HStack {
+                    Text("\(model.unfinishedBatch.count) archive\(model.unfinishedBatch.count == 1 ? "" : "s") not extracted yet")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Discard") { model.discardUnfinishedBatch() }
+                        .buttonStyle(.link)
+                    Button("Resume") { model.resumeUnfinishedBatch() }
+                        .accessibilityIdentifier("resumeBatch")
+                }
+                .font(.callout)
+            }
             if model.jobs.isEmpty {
                 Text("Nothing running.")
                     .foregroundStyle(.secondary)
@@ -57,6 +72,11 @@ struct JobRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case let .running(progress):
+            if job.isPaused {
+                Label("Paused", systemImage: "pause.circle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             if let progress {
                 ProgressView(value: progress.totalBytes > 0 ? progress.fractionCompleted : 0)
                     .accessibilityLabel(job.displayTitle)

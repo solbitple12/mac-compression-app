@@ -19,8 +19,33 @@ final class AppModel {
     /// Every job since launch, oldest first, until "Clear Finished".
     private(set) var jobs: [JobSnapshot] = []
 
-    private let settings: SettingsStore
-    private let queue: JobQueue
+    /// The input's size and samples, measured with the check; nil while checking or extracting.
+    var profile: InputProfile?
+    /// Time, size and memory for the current settings; rough until a probe finishes.
+    var estimate: Estimate?
+    var isEstimating = false
+    /// The RAM gauge, the banner, and the question when the monitor paused jobs.
+    var resourceStatus = ResourceStatus()
+    /// Archives a stopped batch hadn't finished, for Resume.
+    var unfinishedBatch: [URL]
+    /// The question the window asks before starting, if any.
+    var startQuestion: StartQuestion?
+    /// A faster step for the long-job question, found after it opens.
+    var fasterOption: FasterOption?
+    var isFindingFasterOption = false
+    /// Set once the monitor stopped jobs on its own, until the summary is dismissed.
+    var automaticStopSummary: String?
+
+    let settings: SettingsStore
+    let safety = SafetySettings()
+    let queue: JobQueue
+    let estimator: Estimator
+    let monitor: ResourceMonitor
+    @ObservationIgnored var estimateTask: Task<Void, Never>?
+    @ObservationIgnored var fasterTask: Task<Void, Never>?
+    @ObservationIgnored var approvals: StartApproval = []
+    /// What each running compress job was asked to do, so the pause dialog can restart it with lower settings.
+    @ObservationIgnored var compressJobs: [JobID: CompressJob] = [:]
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
     @ObservationIgnored private var cleanupTask: Task<Void, Never>?
     /// Bumped whenever the pending items change, so a check that finishes late is ignored.
@@ -29,10 +54,15 @@ final class AppModel {
     init(registry: EngineRegistry = .standard(), settings: SettingsStore = SettingsStore()) {
         self.registry = registry
         self.settings = settings
-        // One job at a time until Phase 2c adds the memory checks that make running several safe.
+        // One job at a time: the memory checks guard a job, and two large ones at
+        // once would each pass their check and then compete for the same memory.
         queue = JobQueue(maxConcurrentJobs: 1)
         choice = settings.archiveChoice(availableFormats: registry.availableFormats)
+        estimator = Estimator(history: .standard)
+        monitor = ResourceMonitor(queue: queue, policy: safety.policy)
+        unfinishedBatch = settings.unfinishedBatch
         observeJobs()
+        observeResources()
     }
 
     // MARK: Format and speed
@@ -53,6 +83,7 @@ final class AppModel {
     func select(method: CompressionMethod) {
         choice.setMethod(method, for: choice.format)
         settings.archiveChoice = choice
+        scheduleEstimate()
     }
 
     /// False for plain TAR, which only bundles files.
@@ -68,11 +99,13 @@ final class AppModel {
     func select(format: ArchiveFormat) {
         choice.format = format
         settings.archiveChoice = choice
+        scheduleEstimate()
     }
 
     func select(step: SpeedStep) {
         choice.step = step
         settings.archiveChoice = choice
+        scheduleEstimate()
     }
 
     // MARK: Advanced settings
@@ -107,8 +140,11 @@ final class AppModel {
 
     /// Changes and saves the choice, for the Advanced panel's controls.
     func update(_ change: (inout ArchiveChoice) -> Void) {
+        let before = choice
         change(&choice)
         settings.archiveChoice = choice
+        // Checking, the Trash and the junk setting don't change what a probe measures.
+        if before.options != choice.options { scheduleEstimate() }
     }
 
     // MARK: Items
@@ -132,6 +168,8 @@ final class AppModel {
     private func checkPendingItems() {
         checkGeneration += 1
         pendingAction = nil
+        profile = nil
+        scheduleEstimate()
         guard !pendingItems.isEmpty else {
             isCheckingItems = false
             return
@@ -142,14 +180,19 @@ final class AppModel {
         let registry = registry
         Task.detached(priority: .userInitiated) { [weak self] in
             let action = ArchivePlanner.action(for: items, registry: registry)
-            await self?.finishCheck(action, generation: generation)
+            // The estimator needs the input's size and samples; measure them now, once.
+            var profile: InputProfile?
+            if case let .compress(items) = action { profile = InputProfile.scan(items) }
+            await self?.finishCheck(action, profile: profile, generation: generation)
         }
     }
 
-    private func finishCheck(_ action: DropAction, generation: Int) {
+    private func finishCheck(_ action: DropAction, profile: InputProfile?, generation: Int) {
         guard generation == checkGeneration else { return }
         pendingAction = action
+        self.profile = profile
         isCheckingItems = false
+        scheduleEstimate()
     }
 
     func chooseFiles() {
@@ -175,60 +218,95 @@ final class AppModel {
         return true
     }
 
+    /// The start button: runs the checks from the top (see `proceed()`).
+    func start() {
+        approvals = []
+        proceed()
+    }
+
     /// Compresses the pending items into one archive, or extracts each pending archive
-    /// beside itself. With "Move originals to the Trash" on, asks first.
-    func start(trashConfirmed: Bool = false) {
+    /// beside itself, once every check has passed or been answered.
+    func launch() {
         guard let action = pendingAction, canStart else { return }
-        if case .compress = action, choice.trashesOriginals, !trashConfirmed {
-            isConfirmingTrash = true
-            return
-        }
+        let estimate = estimate
         clearPendingItems()
-        let queue = queue
+        startQuestion = nil
         let registry = registry
         let choice = choice
         let password = takesPassword && !password.isEmpty ? password : nil
         self.password = ""
         passwordConfirmation = ""
+        switch action {
+        case let .compress(items):
+            guard let engine = registry.engine(for: choice.format) else { return }
+            let request = CompressRequest(
+                items: items,
+                destination: ArchivePlanner.destination(for: items, format: choice.format),
+                step: choice.step,
+                options: choice.options,
+                password: password,
+                excludesMacOSJunk: choice.excludesMacOSJunk,
+                volumeBytes: choice.volumeBytes
+            )
+            let afterwards = ArchiveJobs.Afterwards(verifies: choice.verifies, trashesOriginals: choice.trashesOriginals)
+            enqueueCompress(CompressJob(request: request, afterwards: afterwards, format: choice.format), estimate: estimate)
+        case let .extract(archives):
+            extract(archives)
+        }
+    }
+
+    /// Enqueues a compress job after launch cleanup, and remembers it for a restart.
+    func enqueueCompress(_ job: CompressJob, estimate: Estimate?) {
+        guard let engine = registry.engine(for: job.format) else { return }
+        let queue = queue
         let cleanup = cleanupTask
-        let settings = settings
-        let willWrite: ArchiveJobs.OutputFolderHandler = { folder in settings.noteOutputDirectory(folder) }
-        Task.detached(priority: .userInitiated) { [weak self] in
+        let history = estimator.history
+        let willWrite = outputFolderHandler
+        Task { [weak self] in
             // Launch cleanup must not delete the partial file of a job started right after launch.
             await cleanup?.value
-            switch action {
-            case let .compress(items):
-                guard let engine = registry.engine(for: choice.format) else { return }
-                let request = CompressRequest(
-                    items: items,
-                    destination: ArchivePlanner.destination(for: items, format: choice.format),
-                    step: choice.step,
-                    options: choice.options,
-                    password: password,
-                    excludesMacOSJunk: choice.excludesMacOSJunk,
-                    volumeBytes: choice.volumeBytes
-                )
-                let afterwards = ArchiveJobs.Afterwards(verifies: choice.verifies, trashesOriginals: choice.trashesOriginals)
-                await ArchiveJobs.compress(request, engine: engine, on: queue, afterwards: afterwards, willWrite: willWrite)
-            case let .extract(archives):
-                // One at a time, so the jobs run in the order the archives were dropped,
-                // and a password can be asked for before the next one starts.
-                for archive in archives {
-                    guard let engine = registry.extractor(for: archive) else { continue }
-                    var password: String?
-                    while true {
-                        let request = ExtractRequest(archive: archive, destinationDirectory: archive.deletingLastPathComponent(),
-                                                     password: password)
-                        let id = await ArchiveJobs.extract(request, engine: engine, on: queue, willWrite: willWrite)
-                        guard case let .failed(error)? = await queue.waitUntilDone(id)?.state,
-                              error == .passwordRequired || error == .wrongPassword,
-                              let entered = await self?.askForPassword(archive: archive, wasWrong: error == .wrongPassword)
-                        else { break }
-                        password = entered
+            let id = await ArchiveJobs.compress(job.request, engine: engine, on: queue, afterwards: job.afterwards,
+                                                estimate: estimate, history: history, willWrite: willWrite)
+            self?.compressJobs[id] = job
+        }
+    }
+
+    /// Extracts each archive in turn. Stopping one stops the batch, and what it hadn't
+    /// finished (the stopped archive included) is saved for Resume.
+    func extract(_ archives: [URL]) {
+        let queue = queue
+        let registry = registry
+        let cleanup = cleanupTask
+        let willWrite = outputFolderHandler
+        Task.detached(priority: .userInitiated) { [weak self] in
+            await cleanup?.value
+            // One at a time, so the jobs run in the order the archives were dropped,
+            // and a password can be asked for before the next one starts.
+            for (index, archive) in archives.enumerated() {
+                guard let engine = registry.extractor(for: archive) else { continue }
+                var password: String?
+                while true {
+                    let request = ExtractRequest(archive: archive, destinationDirectory: archive.deletingLastPathComponent(),
+                                                 password: password)
+                    let id = await ArchiveJobs.extract(request, engine: engine, on: queue, willWrite: willWrite)
+                    let state = await queue.waitUntilDone(id)?.state
+                    if state == .cancelled {
+                        await self?.saveUnfinishedBatch(Array(archives[index...]))
+                        return
                     }
+                    guard case let .failed(error)? = state,
+                          error == .passwordRequired || error == .wrongPassword,
+                          let entered = await self?.askForPassword(archive: archive, wasWrong: error == .wrongPassword)
+                    else { break }
+                    password = entered
                 }
             }
         }
+    }
+
+    private var outputFolderHandler: ArchiveJobs.OutputFolderHandler {
+        let settings = settings
+        return { folder in settings.noteOutputDirectory(folder) }
     }
 
     // MARK: Passwords for extracting

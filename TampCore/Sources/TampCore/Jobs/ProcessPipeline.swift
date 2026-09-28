@@ -84,6 +84,7 @@ final class ChildProcess: @unchecked Sendable {
             return waiters
         }
         process.terminationHandler = nil
+        stopper.didExit()
         for waiter in pending { waiter.resume(returning: status) }
     }
 }

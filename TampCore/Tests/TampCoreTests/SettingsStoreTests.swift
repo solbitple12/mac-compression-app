@@ -108,4 +108,13 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.recentOutputDirectories.count, SettingsStore.recentDirectoryLimit)
         XCTAssertEqual(store.recentOutputDirectories.first?.path, "/tmp/many/29")
     }
+
+    func testUnfinishedBatchIsRememberedUntilCleared() {
+        XCTAssertEqual(store.unfinishedBatch, [])
+        let archives = [URL(fileURLWithPath: "/tmp/a.zip"), URL(fileURLWithPath: "/tmp/b.7z")]
+        store.unfinishedBatch = archives
+        XCTAssertEqual(SettingsStore(defaults: defaults).unfinishedBatch.map(\.path), archives.map(\.path))
+        store.unfinishedBatch = []
+        XCTAssertEqual(store.unfinishedBatch, [])
+    }
 }

@@ -35,6 +35,8 @@ public struct JobSnapshot: Equatable, Sendable, Identifiable {
     public var state: JobState
     /// The archive or extracted item a finished job produced, for "Show in Finder".
     public var output: URL?
+    /// Paused by the resource monitor; the job keeps its place and its memory.
+    public var isPaused = false
 
     /// The title to show for the job's current state.
     public var displayTitle: String {
@@ -45,10 +47,13 @@ public struct JobSnapshot: Equatable, Sendable, Identifiable {
 /// Handed to a running job so it can report progress without touching the queue's internals.
 public final class JobContext: Sendable {
     public let id: JobID
+    /// The job's helpers, for the resource monitor.
+    public let control: JobControl
     private let queue: JobQueue
 
-    init(id: JobID, queue: JobQueue) {
+    init(id: JobID, control: JobControl, queue: JobQueue) {
         self.id = id
+        self.control = control
         self.queue = queue
     }
 
@@ -83,6 +88,7 @@ public actor JobQueue {
         var tracker: ThroughputTracker?
         var startTime: TimeInterval?
         var task: Task<Void, Never>?
+        var control: JobControl?
     }
 
     public let maxConcurrentJobs: Int
@@ -139,6 +145,33 @@ public actor JobQueue {
             finish(id, state: .cancelled)
         } else {
             entry.task?.cancel()
+            // A paused job must run again to stop its helpers and remove its partial output.
+            entry.control?.release()
+        }
+    }
+
+    /// Pauses a running job's helpers (SIGSTOP) until `resume`.
+    public func pause(_ id: JobID) {
+        guard var entry = entries[id], case .running = entry.snapshot.state, let control = entry.control else { return }
+        control.pause()
+        entry.snapshot.isPaused = true
+        entries[id] = entry
+        publish(id)
+    }
+
+    public func resume(_ id: JobID) {
+        guard var entry = entries[id], let control = entry.control, entry.snapshot.isPaused else { return }
+        control.resume()
+        entry.snapshot.isPaused = false
+        entries[id] = entry
+        publish(id)
+    }
+
+    /// Every running job with its helpers, for the resource monitor.
+    public var runningJobs: [(id: JobID, control: JobControl)] {
+        order.compactMap { id -> (id: JobID, control: JobControl)? in
+            guard let entry = entries[id], case .running = entry.snapshot.state, let control = entry.control else { return nil }
+            return (id, control)
         }
     }
 
@@ -231,7 +264,9 @@ public actor JobQueue {
             )
             entry.snapshot.state = .running(nil)
             let work = entry.work
-            let context = JobContext(id: id, queue: self)
+            let control = JobControl()
+            entry.control = control
+            let context = JobContext(id: id, control: control, queue: self)
             entry.task = Task { await self.execute(id, work: work, context: context) }
             entries[id] = entry
             publish(id)
@@ -241,7 +276,9 @@ public actor JobQueue {
     private func execute(_ id: JobID, work: Work, context: JobContext) async {
         let finalState: JobState
         do {
-            try await work(context)
+            try await JobControl.$current.withValue(context.control) {
+                try await work(context)
+            }
             finalState = .finished
         } catch {
             let tampError = TampError(error)
@@ -255,7 +292,9 @@ public actor JobQueue {
     private func finish(_ id: JobID, state: JobState) {
         guard var entry = entries[id] else { return }
         entry.snapshot.state = state
+        entry.snapshot.isPaused = false
         entry.task = nil
+        entry.control = nil
         entries[id] = entry
         publish(id)
         let snapshot = entry.snapshot

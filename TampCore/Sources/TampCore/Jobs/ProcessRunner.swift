@@ -86,6 +86,7 @@ public struct ProcessRunner: Sendable {
         let pipesDrained = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
                 process.terminationHandler = { _ in
+                    stopper.didExit()
                     // The helper can exit before its last output reaches Tamp. A grandchild
                     // that inherited the pipes could hold them open, so don't wait forever.
                     DispatchQueue.global().async {
@@ -123,6 +124,8 @@ final class ProcessStopper: @unchecked Sendable {
     private let lock = NSLock()
     private let process: Process
     private let gracePeriod: TimeInterval
+    /// The job that launched the helper, read when this is made, which is inside the job's task.
+    private let control = JobControl.current
     private var launched = false
     private var stopRequested = false
 
@@ -140,7 +143,12 @@ final class ProcessStopper: @unchecked Sendable {
             launched = true
             return stopRequested
         }
+        control?.register(process.processIdentifier)
         if shouldSignal { sendSignals() }
+    }
+
+    func didExit() {
+        control?.unregister(process.processIdentifier)
     }
 
     func stop() {
@@ -156,6 +164,8 @@ final class ProcessStopper: @unchecked Sendable {
         let process = process
         let pid = process.processIdentifier
         process.terminate()
+        // A helper the resource monitor paused handles SIGTERM only once it runs again.
+        kill(pid, SIGCONT)
         DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) {
             if process.isRunning { kill(pid, SIGKILL) }
         }

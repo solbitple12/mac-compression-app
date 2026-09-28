@@ -70,6 +70,7 @@ public final class SettingsStore: @unchecked Sendable {
     enum Key {
         static let archiveChoice = "archiveChoice"
         static let recentOutputDirectories = "recentOutputDirectories"
+        static let unfinishedBatch = "unfinishedBatch"
     }
 
     /// How many output folders are remembered for the launch-time cleanup of partial files.
@@ -109,6 +110,19 @@ public final class SettingsStore: @unchecked Sendable {
         var paths = recentOutputDirectories.map(\.path).filter { $0 != path }
         paths.insert(path, at: 0)
         encode(Array(paths.prefix(Self.recentDirectoryLimit)), forKey: Key.recentOutputDirectories)
+    }
+
+    /// Archives a stopped batch hadn't started, so Resume can pick up where it
+    /// stopped, even after a relaunch. Empty when there's nothing to resume.
+    public var unfinishedBatch: [URL] {
+        get { (decode([String].self, forKey: Key.unfinishedBatch) ?? []).map { URL(fileURLWithPath: $0) } }
+        set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Key.unfinishedBatch)
+            } else {
+                encode(newValue.map(\.path), forKey: Key.unfinishedBatch)
+            }
+        }
     }
 
     private func decode<Value: Decodable>(_ type: Value.Type, forKey key: String) -> Value? {
