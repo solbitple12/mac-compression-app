@@ -3,10 +3,19 @@ import AppKit
 /// Owns the app model, and stops running jobs safely before Tamp quits.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    let model: AppModel = {
+        #if DEBUG
+        if let settings = UITestHooks.settings { return AppModel(settings: settings) }
+        #endif
+        return AppModel()
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.removeStalePartialFiles()
+        #if DEBUG
+        let items = UITestHooks.itemsToAdd
+        if !items.isEmpty { model.add(items) }
+        #endif
     }
 
     /// Tamp stays open with its window closed, like Keka; clicking the Dock icon brings the window back.

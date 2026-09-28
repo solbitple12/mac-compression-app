@@ -48,4 +48,20 @@ targets:
       - name: Bundle helpers
         script: '"$SRCROOT/scripts/bundle-helpers.sh"'
         basedOnDependencyAnalysis: false
-    scheme: {}
+    scheme:
+      testTargets:
+        - TampUITests
+  TampUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: App/TampUITests
+    dependencies:
+      - target: Tamp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.TampUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Tamp
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"

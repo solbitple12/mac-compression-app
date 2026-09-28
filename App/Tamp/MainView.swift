@@ -62,6 +62,7 @@ struct ArchiveSettingsView: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .accessibilityIdentifier("formatPicker")
 
             SpeedSlider(step: Binding(get: { model.choice.step }, set: { model.select(step: $0) }))
 
@@ -100,6 +101,7 @@ struct SpeedSlider: View {
                 Text("Speed")
             }
             .accessibilityValue("\(step.title), \(step.summary)")
+            .accessibilityIdentifier("speedSlider")
 
             HStack(spacing: 0) {
                 ForEach(Self.steps, id: \.self) { candidate in
