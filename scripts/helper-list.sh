@@ -3,7 +3,7 @@
 # list lives in one place.
 
 # shellcheck disable=SC2034
-TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp)
+TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac)
 
 # shellcheck disable=SC2034
 TAMP_LICENSES=(
@@ -20,4 +20,5 @@ TAMP_LICENSES=(
   oxipng.txt
   mozjpeg.txt
   libwebp.txt
+  flac.txt
 )

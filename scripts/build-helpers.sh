@@ -502,6 +502,26 @@ build_libwebp() {
   stamp cwebp "$LIBWEBP_VERSION"
 }
 
+# The flac CLI, for FLAC.
+build_flac() {
+  built flac "$FLAC_VERSION" && return
+  local dir="$SRC/flac-$FLAC_VERSION"
+  fetch_git "$FLAC_GIT" "$FLAC_VERSION" "$FLAC_COMMIT" "$dir"
+  echo "Building flac $FLAC_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_CXXLIBS=OFF -DBUILD_PROGRAMS=ON -DBUILD_EXAMPLES=OFF \
+    -DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DINSTALL_MANPAGES=OFF -DWITH_OGG=OFF >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target flac >/dev/null
+  # Its exact spot under out/ isn't pinned by the CMakeLists, so find it rather
+  # than guess a nested path that could move between versions.
+  local built_binary
+  built_binary="$(find "$dir/out" -type f -name flac -perm +111 | head -1)"
+  [[ -n "$built_binary" ]] || { echo "flac built but its binary wasn't found under $dir/out" >&2; exit 1; }
+  cp "$built_binary" "$BIN/flac"
+  cp "$dir/COPYING.Xiph" "$LICENSES/flac.txt"
+  stamp flac "$FLAC_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -514,3 +534,4 @@ build_minizip
 build_oxipng
 build_mozjpeg
 build_libwebp
+build_flac
