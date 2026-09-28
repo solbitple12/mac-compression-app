@@ -179,11 +179,24 @@ public struct AppleArchiveEngine: ArchiveEngine {
                 return .ok
             }
         }
+        // writeDirectoryContents fails on a path that isn't a folder, so each file or link
+        // given on its own is cloned into a scratch folder on its own volume and archived from there.
+        var scratchFolders: [URL] = []
+        defer { for folder in scratchFolders { try? FileManager.default.removeItem(at: folder) } }
         do {
             for item in items {
+                var parent = item.deletingLastPathComponent()
+                let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                if values?.isDirectory != true || values?.isSymbolicLink == true {
+                    let scratch = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
+                                                              appropriateFor: item, create: true)
+                    scratchFolders.append(scratch)
+                    try cloneItem(item, into: scratch)
+                    parent = scratch
+                }
                 // Stored as the item's name, then its contents below that.
                 try opened.writeDirectoryContents(
-                    archiveFrom: FilePath(item.deletingLastPathComponent().path),
+                    archiveFrom: FilePath(parent.path),
                     path: FilePath(item.lastPathComponent),
                     keySet: keySet, selectUsing: filter, threadCount: parameters.threads
                 )
@@ -194,6 +207,15 @@ public struct AppleArchiveEngine: ArchiveEngine {
         } catch {
             if monitor.flag.isCancelled { throw CancellationError() }
             throw TampError.other("Apple Archive couldn't write the archive (\(error))")
+        }
+    }
+
+    /// A copy-on-write clone on APFS, so even a large file costs nothing; a full copy elsewhere.
+    /// Keeps the item's attributes, and copies a symbolic link rather than its target.
+    static func cloneItem(_ item: URL, into folder: URL) throws {
+        let target = folder.appendingPathComponent(item.lastPathComponent)
+        guard copyfile(item.path, target.path, nil, copyfile_flags_t(COPYFILE_CLONE)) == 0 else {
+            throw TampError.permissionDenied(path: item.path)
         }
     }
 
