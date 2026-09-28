@@ -72,6 +72,63 @@ MINIZIP_COMMIT=7b2387161c542fa9f427352dcdef76097d0d692b
 # Bump when a minizip patch changes, so cached builds are redone.
 MINIZIP_REVISION=3
 
+# --- Phase 3: images and audio ---
+# Pins only so far; build_ functions and TAMP_HELPERS arrive engine by engine.
+
+MOZJPEG_VERSION=4.1.5
+MOZJPEG_GIT=https://github.com/mozilla/mozjpeg
+MOZJPEG_COMMIT=6c9f0897afa1c2738d7222a0a9ab49e8b536a267
+
+OXIPNG_VERSION=10.2.1
+OXIPNG_GIT=https://github.com/oxipng/oxipng
+OXIPNG_COMMIT=36f3ef8aac65ecf1761739ea2f2e530281f1312b
+
+LIBWEBP_VERSION=1.6.0
+LIBWEBP_GIT=https://github.com/webmproject/libwebp
+LIBWEBP_COMMIT=4fa21912338357f89e4fd51cf2368325b59e9bd9
+
+LIBAVIF_VERSION=1.4.2
+LIBAVIF_GIT=https://github.com/AOMediaCodec/libavif
+LIBAVIF_COMMIT=c5240fc79fe5c2407e10afd35f5505ef6333ea49
+
+# AVIF's AV1 encoder, shared with Phase 4's video; aom isn't reachable from here
+# to compare, so this follows the plan's "SVT-AV1 or aom" alternative.
+SVTAV1_VERSION=4.2.0
+SVTAV1_GIT=https://github.com/AOMediaCodec/SVT-AV1
+SVTAV1_COMMIT=9292ec8e32bce26f781f277ec8739b53426c4300
+
+# AVIF decode, for the before/after preview.
+DAV1D_VERSION=1.5.4
+DAV1D_GIT=https://github.com/videolan/dav1d
+DAV1D_COMMIT=af5b9fe0f9f44a7688263a850c24373b5b3fe9bd
+
+# libjxl needs Google's Highway for its SIMD dispatch.
+LIBJXL_VERSION=0.12.0
+LIBJXL_GIT=https://github.com/libjxl/libjxl
+LIBJXL_COMMIT=a7a9c787341cf703dede03c2009fa460cae5e5df
+
+HIGHWAY_VERSION=1.4.0
+HIGHWAY_GIT=https://github.com/google/highway
+HIGHWAY_COMMIT=2607d3b5b0113992fe84d3848859eae13b3b52c1
+
+FLAC_VERSION=1.5.0
+FLAC_GIT=https://github.com/xiph/flac
+FLAC_COMMIT=1507800de4b70e21be71f38caa0d9079d0bc6e45
+
+OPUS_VERSION=1.6.1
+OPUS_GIT=https://github.com/xiph/opus
+OPUS_COMMIT=22244de5a79bd1d6d623c32e72bf1954b56235be
+
+WAVPACK_VERSION=5.9.0
+WAVPACK_GIT=https://github.com/dbry/WavPack
+WAVPACK_COMMIT=5803634a030e2a11dba602ba057b89cc34486c67
+
+# LAME has no maintained git mirror with tagged releases, so it's pinned as a
+# tarball like the earlier non-git sources. 4.0 is its current stable release.
+LAME_VERSION=4.0
+LAME_URL="https://downloads.sourceforge.net/project/lame/lame/4.0/lame-${LAME_VERSION}.tar.gz"
+LAME_SHA256=3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb
+
 ARCHS=(arm64 x86_64)
 UNIVERSAL_CMAKE=(
   -DCMAKE_BUILD_TYPE=Release

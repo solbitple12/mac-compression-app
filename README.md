@@ -193,3 +193,12 @@ from Homebrew). None of the components is GPL-only.
 7-Zip is built from the unmodified source release above, which also satisfies the
 LGPL's source-availability requirement. The unRAR restriction forbids using that code
 to recreate the RAR compression algorithm; Tamp only extracts RAR.
+
+Phase 3 (images and audio) has its sources pinned in `scripts/build-helpers.sh` but no
+`build_` function yet, so nothing below is built or bundled: mozjpeg 4.1.5 (JPEG, IJG
+and BSD 3-clause licenses), oxipng 10.2.1 (PNG, MIT), libwebp 1.6.0 (WebP, BSD 3-clause),
+libavif 1.4.2 (AVIF, BSD 2-clause) with SVT-AV1 4.2.0 (AV1 encode, BSD 3-clause Clear plus
+the AOM patent license, shared with Phase 4's video) and dav1d 1.5.4 (AV1 decode for the
+preview, BSD 2-clause), libjxl 0.12.0 with Highway 1.4.0 (JPEG XL, BSD 3-clause), FLAC
+1.5.0 (BSD-style), Opus 1.6.1 (BSD 3-clause), WavPack 5.9.0 (BSD 3-clause), and LAME 4.0
+(MP3, GNU LGPL 2.0). This list moves into the table above as each one is actually built.
