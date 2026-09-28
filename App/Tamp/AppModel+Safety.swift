@@ -123,7 +123,8 @@ extension AppModel {
             let memory: (SpeedStep, Int) -> UInt64 = { [choice] step, threads in
                 var options = choice.options
                 options.threads = threads
-                return UInt64(Double(engine.hint(for: step, options: options).peakMemoryBytes) * correction)
+                return UInt64(Double(Estimator.inputAwarePeakMemory(engine: engine, step: step, options: options,
+                                                                    totalBytes: inputBytes)) * correction)
             }
             let needed = estimate?.peakMemoryBytes ?? memory(effectiveStep, choice.options.threads)
             let available = SystemResources.availableMemory()

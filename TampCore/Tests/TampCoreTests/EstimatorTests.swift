@@ -172,6 +172,18 @@ final class EstimatorTests: EngineTestCase {
         XCTAssertFalse(estimate.isRough)
     }
 
+    func testMemoryForASmallInputIsFarBelowTheHintForALargeOne() {
+        let engine = SevenZipEngine()
+        let options = ArchiveOptions(threads: 8)
+        let large = Estimator.inputAwarePeakMemory(engine: engine, step: .best, options: options, totalBytes: 100 << 30)
+        let small = Estimator.inputAwarePeakMemory(engine: engine, step: .best, options: options, totalBytes: 1 << 20)
+        XCTAssertEqual(large, engine.hint(for: .best, options: options).peakMemoryBytes)
+        XCTAssertLessThan(small, large / 8)
+        let zstd = TarEngine(format: .tarZst)
+        XCTAssertLessThan(Estimator.inputAwarePeakMemory(engine: zstd, step: .best, options: options, totalBytes: 1 << 20),
+                          zstd.hint(for: .best, options: options).peakMemoryBytes / 4, "one worker for one job's worth of input")
+    }
+
     func testMovingTheSliderBackUsesTheCache() async throws {
         let profile = try profile()
         let engine = FakeEngine(bytesPerSecond: Double(100 << 20), fixedSeconds: 0.01)

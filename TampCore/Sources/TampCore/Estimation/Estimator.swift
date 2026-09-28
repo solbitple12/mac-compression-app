@@ -53,7 +53,7 @@ public actor Estimator {
                                           options: ArchiveOptions) -> Estimate? {
         history.roughEstimate(format: engine.format, method: engine.format.resolvedMethod(options.method), step: step,
                               threads: options.threads, totalBytes: profile.totalBytes,
-                              peakMemoryBytes: peakMemory(engine: engine, step: step, options: options))
+                              peakMemoryBytes: peakMemory(engine: engine, step: step, options: options, totalBytes: profile.totalBytes))
     }
 
     /// Probes the input, or returns the cached result.
@@ -67,7 +67,8 @@ public actor Estimator {
         }
         guard let measured = try await probe(profile, engine: engine, step: step, options: options) else { return nil }
         let raw = Self.combine(measured, profile: profile, format: engine.format, step: step, options: options,
-                               peakMemoryBytes: engine.hint(for: step, options: options).peakMemoryBytes)
+                               peakMemoryBytes: Self.inputAwarePeakMemory(engine: engine, step: step, options: options,
+                                                                          totalBytes: profile.totalBytes))
         store(raw, for: key)
         return corrected(raw, format: engine.format, step: step, options: options)
     }
@@ -263,8 +264,35 @@ public actor Estimator {
         }
     }
 
-    private nonisolated func peakMemory(engine: any ArchiveEngine, step: SpeedStep, options: ArchiveOptions) -> UInt64 {
-        let hint = engine.hint(for: step, options: options).peakMemoryBytes
+    /// The mapping's memory figure for this input: a job uses no more threads than it
+    /// has units of work (see `ThreadScaling`), and 7-Zip shrinks its dictionary to the
+    /// input. Without this, a small folder at Best looked like it needed gigabytes.
+    public static func inputAwarePeakMemory(engine: any ArchiveEngine, step: SpeedStep, options: ArchiveOptions,
+                                            totalBytes: Int64) -> UInt64 {
+        var options = options
+        let scaling = ThreadScaling.of(format: engine.format, step: step, options: options)
+        if let unit = scaling.unitBytes {
+            let units = max(1, Int((max(1, totalBytes) + unit - 1) / max(1, unit)))
+            options.threads = max(1, min(options.threads, units * scaling.threadsPerUnit))
+        } else if scaling.efficiency == 0 {
+            options.threads = min(options.threads, scaling.threadsPerUnit)
+        }
+        if engine.format == .sevenZip, options.advanced.dictionaryMebibytes == nil,
+           let method = engine.format.resolvedMethod(options.method), method == .lzma2 || method == .lzma {
+            let level = SevenZipMapping().parameters(for: step, options: options).level
+            let dictionary = SevenZipMapping.dictionarySize(level: level)
+            if UInt64(max(0, totalBytes)) < dictionary {
+                var mebibytes = 1
+                while Int64(mebibytes) << 20 < totalBytes { mebibytes *= 2 }
+                options.advanced.dictionaryMebibytes = mebibytes
+            }
+        }
+        return engine.hint(for: step, options: options).peakMemoryBytes
+    }
+
+    private nonisolated func peakMemory(engine: any ArchiveEngine, step: SpeedStep, options: ArchiveOptions,
+                                        totalBytes: Int64) -> UInt64 {
+        let hint = Self.inputAwarePeakMemory(engine: engine, step: step, options: options, totalBytes: totalBytes)
         let correction = history.memoryCorrection(format: engine.format, method: engine.format.resolvedMethod(options.method), step: step)
         return UInt64(Double(hint) * correction)
     }
