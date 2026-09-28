@@ -483,6 +483,22 @@ build_mozjpeg() {
   stamp jpegtran "$MOZJPEG_VERSION"
 }
 
+# cwebp for WebP, lossy and lossless.
+build_libwebp() {
+  built cwebp "$LIBWEBP_VERSION" && return
+  local dir="$SRC/libwebp-$LIBWEBP_VERSION"
+  fetch_git "$LIBWEBP_GIT" "v$LIBWEBP_VERSION" "$LIBWEBP_COMMIT" "$dir"
+  echo "Building libwebp $LIBWEBP_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" \
+    -DWEBP_BUILD_CWEBP=ON -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
+    -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
+    -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target cwebp >/dev/null
+  cp "$dir/out/cwebp" "$BIN/cwebp"
+  cp "$dir/COPYING" "$LICENSES/libwebp.txt"
+  stamp cwebp "$LIBWEBP_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -494,3 +510,4 @@ build_zpaq
 build_minizip
 build_oxipng
 build_mozjpeg
+build_libwebp

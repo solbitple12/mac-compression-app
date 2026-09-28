@@ -186,6 +186,7 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 | [minizip-ng](https://github.com/zlib-ng/minizip-ng) (`minizip`) | 4.2.2 | Writing Zstandard inside ZIP | zlib license |
 | [oxipng](https://github.com/oxipng/oxipng) (`oxipng`) | 10.2.1 | PNG | MIT |
 | [mozjpeg](https://github.com/mozilla/mozjpeg) (`cjpeg`, `djpeg`, `jpegtran`) | 4.1.5 | JPEG | IJG license, BSD 3-clause, zlib license |
+| [libwebp](https://github.com/webmproject/libwebp) (`cwebp`) | 1.6.0 | WebP | BSD 3-clause |
 
 Tamp patches three of them, with the patches in `scripts/patches`: minizip-ng (store link
 targets the Info-ZIP way, skip Mac junk files, read the password from stdin, mark archives
@@ -197,10 +198,10 @@ from Homebrew). None of the components is GPL-only.
 LGPL's source-availability requirement. The unRAR restriction forbids using that code
 to recreate the RAR compression algorithm; Tamp only extracts RAR.
 
-Phase 3 (images and audio) is under way. oxipng and mozjpeg are built and bundled, in
-the table above. The rest have their sources pinned in `scripts/build-helpers.sh` but
-no `build_` function yet, so nothing below is built or bundled: libwebp 1.6.0 (WebP,
-BSD 3-clause), libavif 1.4.2 (AVIF, BSD 2-clause) with SVT-AV1 4.2.0 (AV1 encode,
+Phase 3 (images and audio) is under way. oxipng, mozjpeg and libwebp are built and
+bundled, in the table above. The rest have their sources pinned in
+`scripts/build-helpers.sh` but no `build_` function yet, so nothing below is built
+or bundled: libavif 1.4.2 (AVIF, BSD 2-clause) with SVT-AV1 4.2.0 (AV1 encode,
 BSD 3-clause Clear plus the AOM patent license, shared with Phase 4's video) and
 dav1d 1.5.4 (AV1 decode for the preview, BSD 2-clause), libjxl 0.12.0 with Highway
 1.4.0 (JPEG XL, BSD 3-clause), FLAC 1.5.0 (BSD-style), Opus 1.6.1 (BSD 3-clause),
