@@ -135,22 +135,22 @@ OPUS_COMMIT=22244de5a79bd1d6d623c32e72bf1954b56235be
 
 OGG_VERSION=1.3.6
 OGG_GIT=https://github.com/xiph/ogg
-OGG_COMMIT=db03f952b25717fd5c4938817c9290837a4ae1b2
+OGG_COMMIT=be05b13e98b048f0b5a0f5fa8ce514d56db5f822
 
 # Neither has a vendored configure script in git (only in their release tarballs),
 # so their build runs autogen.sh: a real autoreconf bootstrap, the only one in
 # this script.
 LIBOPUSENC_VERSION=0.2.1
 LIBOPUSENC_GIT=https://github.com/xiph/libopusenc
-LIBOPUSENC_COMMIT=6b80503f263ebbc6479fb346c0e31dc4619b6f8c
+LIBOPUSENC_COMMIT=b19e1b14dee3e5245f2e37bfb193bde72fa70a2d
 
 OPUSFILE_VERSION=0.12
 OPUSFILE_GIT=https://github.com/xiph/opusfile
-OPUSFILE_COMMIT=f07833584e66c4409d1eb7ea616b3ac42e1edeef
+OPUSFILE_COMMIT=a55c164e9891a9326188b7d4d216ec9a88373739
 
 OPUSTOOLS_VERSION=0.2
 OPUSTOOLS_GIT=https://github.com/xiph/opus-tools
-OPUSTOOLS_COMMIT=18384b5e6e638db12a8c04aded64f6ebb42db917
+OPUSTOOLS_COMMIT=0c1337f57e5b87fd23421904303fed3e575ce354
 
 WAVPACK_VERSION=5.9.0
 WAVPACK_GIT=https://github.com/dbry/WavPack
