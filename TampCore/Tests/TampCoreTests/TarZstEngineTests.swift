@@ -46,8 +46,11 @@ final class TarZstEngineTests: EngineTestCase {
     }
 
     func testHigherStepsAreNotLarger() async throws {
+        // Text only: the fixture's random data doesn't compress, and on it zstd's
+        // higher levels can come out a few bytes larger.
+        let text = [project.appendingPathComponent("readme.txt")]
         func size(_ step: SpeedStep) async throws -> Int {
-            let archive = try await compress(step, name: "Size-\(step.title).tar.zst")
+            let archive = try await compress(step, name: "Size-\(step.title).tar.zst", items: text)
             return try archive.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         }
         let store = try await size(.store)
