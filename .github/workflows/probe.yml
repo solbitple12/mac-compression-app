@@ -1,0 +1,38 @@
+name: Probe
+
+# Temporary: dumps the AppleArchive Swift interface and the aa and hdiutil
+# usage from the runner's SDK, to write the Apple Archive and DMG engines against.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe.yml
+
+jobs:
+  probe:
+    name: Probe
+    runs-on: macos-15
+    steps:
+      - name: AppleArchive interface
+        run: |
+          sdk=$(xcrun --show-sdk-path)
+          f=$(find "$sdk/System/Library/Frameworks/AppleArchive.framework" -name '*arm64e-apple-macos.swiftinterface' | head -1)
+          echo "PROBE-AA-BEGIN"; grep -v '^\s*$' "$f" | grep -v '^//' ; echo "PROBE-AA-END"
+      - name: aa usage
+        run: |
+          echo "PROBE-AACLI-BEGIN"; (aa -h 2>&1 || true); (man aa 2>/dev/null | col -b || true); echo "PROBE-AACLI-END"
+      - name: hdiutil usage
+        run: |
+          echo "PROBE-HDI-BEGIN"; (hdiutil create -help 2>&1 || true)
+          (man hdiutil 2>/dev/null | col -b | sed -n '/^     create/,/^     convert/p' || true)
+          (man hdiutil 2>/dev/null | col -b | grep -n -A6 -E 'puppetstrings|stdinpass|-encryption|ULMO|ULFO|UDZO|zlib-level' || true)
+          echo "PROBE-HDI-END"
+      - name: hdiutil trial
+        run: |
+          mkdir -p src/Box && echo hello > src/Box/a.txt && head -c 3000000 /dev/urandom > src/Box/r.bin
+          hdiutil create -srcfolder src/Box -format UDZO -imagekey zlib-level=1 -puppetstrings -o t1.dmg 2>&1 | head -60
+          printf 'secret' | hdiutil create -srcfolder src/Box -format ULMO -encryption AES-256 -stdinpass -puppetstrings -o t2.dmg 2>&1 | tail -20
+          ls -l t1.dmg t2.dmg
+          hdiutil imageinfo t2.dmg -stdinpass <<< 'secret' | head -20 || true
+          printf 'secret' | hdiutil attach t2.dmg -stdinpass -nobrowse -readonly -mountrandom /tmp -plist | head -40
+          aa archive -d src -o t.aar -a lzma -b 16m -t 2 -v 2>&1 | head -20
+          aa extract -d out -i t.aar -v 2>&1 | head -20; ls -lR out | head
