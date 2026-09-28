@@ -598,6 +598,46 @@ build_lame() {
   stamp lame "$LAME_VERSION"
 }
 
+# SvtAv1EncApp, and libSvtAv1Enc installed into deps/ for libavif's AVIF encode
+# (Phase 3) and, later, Phase 4's AV1 video to link against. Heavily hand-optimized
+# SIMD, like mozjpeg, so the same per-architecture build and lipo, not
+# UNIVERSAL_CMAKE's single pass.
+build_svtav1() {
+  built SvtAv1EncApp "$SVTAV1_VERSION" && return
+  local dir="$SRC/SVT-AV1-$SVTAV1_VERSION"
+  fetch_git "$SVTAV1_GIT" "v$SVTAV1_VERSION" "$SVTAV1_COMMIT" "$dir"
+  local app_slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building SVT-AV1 $SVTAV1_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DBUILD_TESTING=OFF >/dev/null
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target SvtAv1EncApp SvtAv1Enc >/dev/null
+    cmake --install "$dir/out-$arch" --component Runtime >/dev/null
+    cmake --install "$dir/out-$arch" --component Development >/dev/null
+    local app_binary
+    app_binary="$(find "$dir/out-$arch" -type f -name SvtAv1EncApp -perm +111 | head -1)"
+    [[ -n "$app_binary" ]] || { echo "SVT-AV1 built for $arch but SvtAv1EncApp wasn't found under $dir/out-$arch" >&2; exit 1; }
+    app_slices+=("$app_binary")
+  done
+  lipo -create -output "$BIN/SvtAv1EncApp" "${app_slices[@]}"
+  # Headers, the pkg-config file and the CMake package config are plain text, so
+  # one architecture's copy is enough; the static library itself needs lipo'ing
+  # into a universal archive like every other DEPS library, so whichever
+  # architecture links against it later (here, and again in Phase 4) gets its slice.
+  mkdir -p "$DEPS/include" "$DEPS/lib"
+  cp -R "$dir/install-arm64/include/." "$DEPS/include/"
+  cp -R "$dir/install-arm64/lib/." "$DEPS/lib/"
+  local static_library
+  static_library="$(find "$dir/install-arm64/lib" -type f -name 'libSvtAv1Enc.a' | head -1)"
+  [[ -n "$static_library" ]] || { echo "SVT-AV1 installed but its static library wasn't found" >&2; exit 1; }
+  local relative="${static_library#"$dir/install-arm64/lib/"}"
+  lipo -create -output "$DEPS/lib/$relative" "$dir/install-arm64/lib/$relative" "$dir/install-x86_64/lib/$relative"
+  cp "$dir/LICENSE.md" "$LICENSES/SVT-AV1.txt"
+  stamp SvtAv1EncApp "$SVTAV1_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -613,3 +653,4 @@ build_libwebp
 build_flac
 build_wavpack
 build_lame
+build_svtav1

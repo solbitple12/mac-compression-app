@@ -205,10 +205,15 @@ to recreate the RAR compression algorithm; Tamp only extracts RAR.
 
 Phase 3 (images and audio) is under way. oxipng, mozjpeg, libwebp, HEIC, FLAC,
 WavPack, AAC, ALAC and LAME are built and bundled (or, for AAC/ALAC/HEIC, need
-nothing to bundle), in the table above. The rest have their sources pinned in
-`scripts/build-helpers.sh` but no `build_` function yet, so nothing below is built
-or bundled: libavif 1.4.2 (AVIF, BSD 2-clause) with SVT-AV1 4.2.0 (AV1 encode,
-BSD 3-clause Clear plus the AOM patent license, shared with Phase 4's video) and
+nothing to bundle), in the table above. SVT-AV1 4.2.0 (BSD 3-clause Clear plus the
+AOM patent license) is also built now, for both this phase's AVIF encode and Phase
+4's AV1 video, but nothing writes AVIF yet: libavif itself isn't built. The rest
+have their sources pinned in `scripts/build-helpers.sh` but no `build_` function
+yet, so nothing below is built or bundled: libavif 1.4.2 (AVIF, BSD 2-clause) and
 dav1d 1.5.4 (AV1 decode for the preview, BSD 2-clause), libjxl 0.12.0 with Highway
-1.4.0 (JPEG XL, BSD 3-clause), and Opus 1.6.1 (BSD 3-clause). This list moves into
-the table above as each one is actually built.
+1.4.0 (JPEG XL, BSD 3-clause), and Opus 1.6.1 (BSD 3-clause) — Opus turned out to
+need more than expected: opusenc has no CMake build and needs libogg, libopusenc
+and opusfile besides libopus itself, with libopusenc and opus-tools needing a real
+autotools bootstrap (no vendored `configure` in their git history) rather than the
+CMake or ready-made `configure` every other Phase 3 source has had so far. This
+list moves into the table above as each one is actually built.
