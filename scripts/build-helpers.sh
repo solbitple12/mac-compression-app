@@ -111,6 +111,12 @@ HIGHWAY_VERSION=1.4.0
 HIGHWAY_GIT=https://github.com/google/highway
 HIGHWAY_COMMIT=2607d3b5b0113992fe84d3848859eae13b3b52c1
 
+# libjxl's color-management fallback (JPEGXL_ENABLE_SKCMS): a git submodule with no
+# "use the system copy" option, compiled directly from source, not a library with
+# its own releases or tags.
+SKCMS_GIT=https://github.com/google/skcms
+SKCMS_COMMIT=c1248c99cbd8cdc3ed8e8314c997600724e10c70
+
 FLAC_VERSION=1.5.0
 FLAC_GIT=https://github.com/xiph/flac
 FLAC_COMMIT=1507800de4b70e21be71f38caa0d9079d0bc6e45
@@ -396,15 +402,23 @@ build_pbzip2() {
 
 # The brotli tool for TAR.BR.
 build_brotli() {
-  built brotli "$BROTLI_VERSION" && return
+  local version="$BROTLI_VERSION"
+  if built brotli "$version" && [[ -f "$DEPS/.brotli-libs-$version" ]]; then
+    return
+  fi
   local dir="$SRC/brotli-$BROTLI_VERSION"
   fetch_git "$BROTLI_GIT" "v$BROTLI_VERSION" "$BROTLI_COMMIT" "$dir"
   echo "Building brotli $BROTLI_VERSION"
-  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DBROTLI_DISABLE_TESTS=ON >/dev/null
-  cmake --build "$dir/out" -j"$JOBS" --target brotli >/dev/null
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_INSTALL_PREFIX="$DEPS" -DBROTLI_DISABLE_TESTS=ON >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target brotli brotlicommon brotlienc brotlidec >/dev/null
   cp "$dir/out/brotli" "$BIN/brotli"
+  # Also installed for libjxl (Phase 3) to link against: its own FindBrotli.cmake
+  # looks for brotlicommon/brotlienc/brotlidec by plain find_library, which this
+  # satisfies without needing a real Brotli CMake package.
+  cmake --install "$dir/out" >/dev/null
   cp "$dir/LICENSE" "$LICENSES/brotli.txt"
-  stamp brotli "$BROTLI_VERSION"
+  stamp brotli "$version"
+  touch "$DEPS/.brotli-libs-$version"
 }
 
 # zpaq for ZPAQ. NOJIT: its JIT writes x86 code at run time, which doesn't run on
@@ -512,13 +526,25 @@ build_libwebp() {
   built cwebp "$LIBWEBP_VERSION" && return
   local dir="$SRC/libwebp-$LIBWEBP_VERSION"
   fetch_git "$LIBWEBP_GIT" "v$LIBWEBP_VERSION" "$LIBWEBP_COMMIT" "$dir"
-  echo "Building libwebp $LIBWEBP_VERSION"
-  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-    -DWEBP_BUILD_CWEBP=ON -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
-    -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
-    -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF >/dev/null
-  cmake --build "$dir/out" -j"$JOBS" --target cwebp >/dev/null
-  cp "$dir/out/cwebp" "$BIN/cwebp"
+  # Its x86 and NEON SIMD, like mozjpeg's, doesn't compile correctly in a single
+  # multi-arch CMAKE_OSX_ARCHITECTURES pass (no explicit guard the way
+  # libjpeg-turbo has one, but the arm64 host still mis-detects the x86_64 slice's
+  # target features and breaks its SSE2 code): the same per-arch build and lipo.
+  local slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building libwebp $LIBWEBP_VERSION for $arch"
+    cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DWEBP_BUILD_CWEBP=ON -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
+      -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
+      -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF >/dev/null
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target cwebp >/dev/null
+    local cwebp_binary
+    cwebp_binary="$(find "$dir/out-$arch" -type f -name cwebp -perm +111 | head -1)"
+    [[ -n "$cwebp_binary" ]] || { echo "libwebp built for $arch but cwebp wasn't found under $dir/out-$arch" >&2; exit 1; }
+    slices+=("$cwebp_binary")
+  done
+  lipo -create -output "$BIN/cwebp" "${slices[@]}"
   cp "$dir/COPYING" "$LICENSES/libwebp.txt"
   stamp cwebp "$LIBWEBP_VERSION"
 }
@@ -638,6 +664,58 @@ build_svtav1() {
   stamp SvtAv1EncApp "$SVTAV1_VERSION"
 }
 
+# Highway (libhwy) into deps/, for libjxl's SIMD dispatch. Its SIMD is
+# target-specific C++ compiled per-architecture by clang itself, not separate
+# assembly files, so (unlike mozjpeg and SVT-AV1) the ordinary single-pass
+# universal build works.
+build_highway() {
+  local stamp="$DEPS/.highway-$HIGHWAY_VERSION"
+  [[ -f "$stamp" ]] && { echo "Highway $HIGHWAY_VERSION is already built"; return; }
+  local dir="$SRC/highway-$HIGHWAY_VERSION"
+  fetch_git "$HIGHWAY_GIT" "$HIGHWAY_VERSION" "$HIGHWAY_COMMIT" "$dir"
+  echo "Building Highway $HIGHWAY_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_INSTALL_PREFIX="$DEPS" \
+    -DHWY_ENABLE_CONTRIB=OFF -DHWY_ENABLE_EXAMPLES=OFF -DHWY_ENABLE_TESTS=OFF -DHWY_ENABLE_INSTALL=ON >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target hwy >/dev/null
+  cmake --install "$dir/out" >/dev/null
+  cp "$dir/LICENSE" "$LICENSES/highway.txt"
+  touch "$stamp"
+}
+
+# cjxl and djxl, for JPEG XL. Highway and Brotli come from deps/, found the way
+# libjxl's own third_party/CMakeLists.txt and cmake/FindBrotli.cmake look for
+# them (JPEGXL_FORCE_SYSTEM_HWY, plain find_library). skcms has no such option
+# and isn't a library with its own build, so its source goes straight into
+# libjxl's own third_party/skcms, where its CMake expects to find it. sjpeg and
+# OpenEXR support are off: Tamp doesn't need either.
+build_libjxl() {
+  if built cjxl "$LIBJXL_VERSION" && built djxl "$LIBJXL_VERSION"; then
+    return
+  fi
+  local dir="$SRC/libjxl-$LIBJXL_VERSION"
+  fetch_git "$LIBJXL_GIT" "v$LIBJXL_VERSION" "$LIBJXL_COMMIT" "$dir"
+  fetch_git "$SKCMS_GIT" main "$SKCMS_COMMIT" "$dir/third_party/skcms"
+  echo "Building libjxl $LIBJXL_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_PREFIX_PATH="$DEPS" \
+    -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_TOOLS=ON -DJPEGXL_FORCE_SYSTEM_HWY=ON -DJPEGXL_FORCE_SYSTEM_BROTLI=ON \
+    -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_PLUGINS=OFF \
+    -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_EXAMPLES=OFF -DJPEGXL_ENABLE_MANPAGES=OFF \
+    -DJPEGXL_ENABLE_DOXYGEN=OFF -DBUILD_TESTING=OFF >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target cjxl djxl >/dev/null
+  local cjxl_binary djxl_binary
+  cjxl_binary="$(find "$dir/out" -type f -name cjxl -perm +111 | head -1)"
+  djxl_binary="$(find "$dir/out" -type f -name djxl -perm +111 | head -1)"
+  if [[ -z "$cjxl_binary" || -z "$djxl_binary" ]]; then
+    echo "libjxl built but cjxl/djxl weren't found under $dir/out" >&2
+    exit 1
+  fi
+  cp "$cjxl_binary" "$BIN/cjxl"
+  cp "$djxl_binary" "$BIN/djxl"
+  cp "$dir/LICENSE" "$LICENSES/libjxl.txt"
+  stamp cjxl "$LIBJXL_VERSION"
+  stamp djxl "$LIBJXL_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -654,3 +732,5 @@ build_flac
 build_wavpack
 build_lame
 build_svtav1
+build_highway
+build_libjxl
