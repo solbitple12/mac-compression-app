@@ -13,14 +13,19 @@ jobs:
     runs-on: macos-15
     steps:
       - name: AppleArchive interface
+        continue-on-error: true
         run: |
           sdk=$(xcrun --show-sdk-path)
-          f=$(find "$sdk/System/Library/Frameworks/AppleArchive.framework" -name '*arm64e-apple-macos.swiftinterface' | head -1)
+          find "$sdk" -iname '*AppleArchive*' -maxdepth 6 | head -20
+          f=$(find "$sdk" -path '*AppleArchive.swiftmodule*' -name '*arm64e-apple-macos.swiftinterface' | head -1)
+          echo "file: $f"
           echo "PROBE-AA-BEGIN"; grep -v '^\s*$' "$f" | grep -v '^//' ; echo "PROBE-AA-END"
       - name: aa usage
+        continue-on-error: true
         run: |
           echo "PROBE-AACLI-BEGIN"; (aa -h 2>&1 || true); (man aa 2>/dev/null | col -b || true); echo "PROBE-AACLI-END"
       - name: hdiutil usage
+        continue-on-error: true
         run: |
           echo "PROBE-HDI-BEGIN"; (hdiutil create -help 2>&1 || true)
           (man hdiutil 2>/dev/null | col -b | sed -n '/^     create/,/^     convert/p' || true)
