@@ -8,6 +8,9 @@ final class TampErrorTests: XCTestCase {
         XCTAssertEqual(TampError.classify(tool: "7zz", exitCode: 2, standardError: "ERROR: CRC Failed : photo.jpg"), .corruptArchive)
         XCTAssertEqual(TampError.classify(tool: "7zz", exitCode: 8, standardError: ""), .outOfMemory)
         XCTAssertEqual(TampError.classify(tool: "zstd", exitCode: 1, standardError: "zstd: /Volumes/x: Permission denied"), .permissionDenied(path: nil))
+        XCTAssertEqual(TampError.classify(tool: "brotli", exitCode: 1, standardError: "corrupt input [con]"), .corruptArchive)
+        XCTAssertEqual(TampError.classify(tool: "tar", exitCode: 1, standardError: "bsdtar: Error opening archive: truncated lz4 input"), .corruptArchive)
+        XCTAssertEqual(TampError.classify(tool: "xz", exitCode: 1, standardError: "xz: (stdin): File format not recognized"), .corruptArchive)
     }
 
     func testUnknownFailureKeepsFirstLine() {

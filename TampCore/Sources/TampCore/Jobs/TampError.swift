@@ -80,7 +80,7 @@ extension TampError {
     }
 
     /// Maps a helper's exit code and error output to a specific error.
-    /// The patterns cover 7zz, zstd and libarchive messages.
+    /// The patterns cover 7zz, libarchive and the compressor tools' messages.
     public static func classify(tool: String, exitCode: Int32, standardError: String) -> TampError {
         let text = standardError.lowercased()
         func mentions(_ patterns: String...) -> Bool {
@@ -105,7 +105,8 @@ extension TampError {
         }
         if mentions("data error", "crc failed", "headers error", "unexpected end", "data corruption",
                     "truncated", "damaged", "can not open the file as archive", "premature end",
-                    "unknown frame descriptor", "unrecognized archive format") {
+                    "unknown frame descriptor", "unrecognized archive format", "corrupt",
+                    "decompression failed", "file format not recognized", "integrity") {
             return .corruptArchive
         }
         let firstLine = standardError

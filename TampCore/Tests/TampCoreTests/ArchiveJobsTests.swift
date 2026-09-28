@@ -3,7 +3,7 @@ import XCTest
 
 /// The path the window takes: a drop becomes a queued job that runs a real engine.
 final class ArchiveJobsTests: EngineTestCase {
-    override var requiredHelpers: [String] { ["7zz", "bsdtar", "zstd"] }
+    override var requiredHelpers: [String] { ["7zz", "bsdtar", "zstd", "xz", "pigz", "pbzip2", "brotli"] }
 
     func testDroppedFolderIsCompressedThenExtractedThroughTheQueue() async throws {
         let registry = EngineRegistry.standard()
@@ -18,6 +18,7 @@ final class ArchiveJobsTests: EngineTestCase {
             let compressID = await ArchiveJobs.compress(request, engine: engine, on: queue)
             let compressed = await queue.waitUntilDone(compressID)
             XCTAssertEqual(compressed?.state, .finished, format.title)
+            XCTAssertEqual(compressed?.displayTitle, "Compressed “Project” as \(format.title)")
             let archive = try XCTUnwrap(compressed?.output, format.title)
             XCTAssertEqual(archive.deletingLastPathComponent().standardizedFileURL.path, workspace.standardizedFileURL.path)
             XCTAssertEqual(archive.lastPathComponent, "Project.\(format.fileExtension)")
@@ -30,6 +31,7 @@ final class ArchiveJobsTests: EngineTestCase {
             let extractID = await ArchiveJobs.extract(ExtractRequest(archive: archives[0], destinationDirectory: target), engine: extractor, on: queue)
             let extracted = await queue.waitUntilDone(extractID)
             XCTAssertEqual(extracted?.state, .finished, format.title)
+            XCTAssertEqual(extracted?.displayTitle, "Extracted “\(archive.lastPathComponent)”")
             assertMatchesProject(try XCTUnwrap(extracted?.output))
             try fileManager.removeItem(at: archive)
         }

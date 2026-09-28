@@ -112,3 +112,68 @@ final class TarZstMappingTests: XCTestCase {
         XCTAssertEqual(ArchiveOptions(threads: 0).threads, 1)
     }
 }
+
+final class TarMappingTests: XCTestCase {
+    let options = ArchiveOptions(threads: 4)
+
+    private func compression(_ format: ArchiveFormat, _ step: SpeedStep) -> TarCompression {
+        TarMapping(format: format).parameters(for: step, options: options)
+    }
+
+    func testEachFormatsToolAndLevels() {
+        XCTAssertEqual(compression(.tarGz, .fastest), .tool(name: "pigz", arguments: ["-1", "-p", "4", "-c"]))
+        XCTAssertEqual(compression(.tarGz, .best), .tool(name: "pigz", arguments: ["-11", "-p", "4", "-c"]))
+        XCTAssertEqual(compression(.tarBz2, .normal), .tool(name: "pbzip2", arguments: ["-6", "-p4", "-c"]))
+        XCTAssertEqual(compression(.tarXz, .fastest), .tool(name: "xz", arguments: ["-0", "-T4", "--memlimit-compress=50%", "-q", "-Q", "-c"]))
+        XCTAssertEqual(compression(.tarXz, .best), .tool(name: "xz", arguments: ["-9e", "-T4", "--memlimit-compress=50%", "-q", "-Q", "-c"]))
+        XCTAssertEqual(compression(.tarZst, .normal), .tool(name: "zstd", arguments: ["-9", "-T4", "-q", "-c"]))
+        XCTAssertEqual(compression(.tarBr, .best), .tool(name: "brotli", arguments: ["-q", "11", "-w", "24", "-c"]))
+        XCTAssertEqual(compression(.tarLz4, .best), .libarchiveFilter(name: "lz4", level: 9))
+        XCTAssertEqual(compression(.tarLz, .fastest), .libarchiveFilter(name: "lzip", level: 0))
+    }
+
+    func testStoreAndPlainTarWriteNoCompression() {
+        for format in [ArchiveFormat.tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr] {
+            XCTAssertEqual(compression(format, .store), TarCompression.plainTar, format.title)
+            XCTAssertEqual(TarMapping(format: format).hint(for: .store, options: options).outputExtension, "tar")
+            XCTAssertEqual(TarMapping(format: format).hint(for: .fast, options: options).outputExtension, format.fileExtension)
+        }
+        for step in SpeedStep.allCases {
+            XCTAssertEqual(compression(.tar, step), TarCompression.plainTar)
+            let hint = TarMapping(format: .tar).hint(for: step, options: options)
+            XCTAssertEqual(hint.step, .store)
+            XCTAssertEqual(hint.notes, ["TAR bundles files without compressing"])
+        }
+    }
+
+    func testLevelsNeverRepeatAcrossCompressingSteps() {
+        for format in [ArchiveFormat.tarGz, .tarBz2, .tarXz, .tarLz4, .tarLz, .tarBr] {
+            let steps = SpeedStep.allCases.dropFirst().map { compression(format, $0) }
+            XCTAssertEqual(Set(steps.map { "\($0)" }).count, steps.count, format.title)
+        }
+    }
+
+    func testMemoryGrowsWithTheStep() {
+        // One thread: with more, xz's thread cut can make Best need less than Good.
+        let options = ArchiveOptions(threads: 1)
+        for format in [ArchiveFormat.tarGz, .tarBz2, .tarXz, .tarZst, .tarLz, .tarBr] {
+            let memory = SpeedStep.allCases.dropFirst().map { TarMapping(format: format).hint(for: $0, options: options).peakMemoryBytes }
+            XCTAssertEqual(memory, memory.sorted(), format.title)
+        }
+    }
+
+    func testXzMemoryMatchesItsManual() {
+        // xz -9 with 8 threads was measured at about 10 GB before xz lowers the thread count.
+        XCTAssertEqual(TarMapping.xzMemoryPerThread(preset: 9), (674 + 9 * 64) * .mebibyte)
+        XCTAssertEqual(TarMapping.lzmaMemory(preset: 6), 94 * .mebibyte)
+        // Never more than half the RAM, because xz lowers its thread count to fit.
+        let best = TarMapping(format: .tarXz).hint(for: .best, options: ArchiveOptions(threads: 64)).peakMemoryBytes
+        XCTAssertLessThanOrEqual(best, max(ProcessInfo.processInfo.physicalMemory / 2, TarMapping.xzMemoryPerThread(preset: 9)) + TarMapping.tarMemory)
+    }
+
+    func testOnlyThreadedToolsClaimMultithreading() {
+        XCTAssertTrue(TarMapping(format: .tarXz).capabilities.contains(.multithreading))
+        XCTAssertFalse(TarMapping(format: .tarLz4).capabilities.contains(.multithreading))
+        XCTAssertFalse(TarMapping(format: .tarBr).capabilities.contains(.multithreading))
+    }
+}

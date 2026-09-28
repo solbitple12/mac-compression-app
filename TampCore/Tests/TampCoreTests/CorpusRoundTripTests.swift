@@ -1,12 +1,13 @@
 import XCTest
 @testable import TampCore
 
-/// Byte-for-byte round trips of the test corpus through every Phase 1 engine,
+/// Byte-for-byte round trips of the test corpus through every engine,
 /// and cancel-mid-job checks for extraction and for jobs run by the queue.
 final class CorpusRoundTripTests: EngineTestCase {
-    override var requiredHelpers: [String] { ["7zz", "bsdtar", "zstd"] }
+    override var requiredHelpers: [String] { ["7zz", "bsdtar", "zstd", "xz", "pigz", "pbzip2", "brotli"] }
 
-    private let engines: [any ArchiveEngine] = [ZipEngine(), TarZstEngine()]
+    private let engines: [any ArchiveEngine] = [ZipEngine()]
+        + [ArchiveFormat.tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr].map { TarEngine(format: $0) }
 
     private func archiveName(_ base: String, for engine: any ArchiveEngine) -> String {
         "\(base).\(engine.format.fileExtension)"
@@ -104,7 +105,7 @@ final class CorpusRoundTripTests: EngineTestCase {
         let request = CompressRequest(items: [project], destination: output.appendingPathComponent("Queued.tar.zst"), step: .best,
                                       options: ArchiveOptions(threads: 2))
         let totalBytes = InputSize.totalBytes(of: request.items)
-        let engine = TarZstEngine()
+        let engine = TarEngine(format: .tarZst)
         let id = await queue.enqueue(title: "Queued", totalBytes: totalBytes) { context in
             _ = try await engine.compress(request, progress: context.progressHandler(totalBytes: totalBytes))
         }

@@ -37,7 +37,7 @@ struct JobRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(job.title)
+                Text(job.displayTitle)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 status
@@ -59,7 +59,7 @@ struct JobRow: View {
         case let .running(progress):
             if let progress {
                 ProgressView(value: progress.totalBytes > 0 ? progress.fractionCompleted : 0)
-                    .accessibilityLabel(job.title)
+                    .accessibilityLabel(job.displayTitle)
                 Text(ProgressText.status(progress))
                     .font(.caption)
                     .monospacedDigit()
@@ -67,7 +67,7 @@ struct JobRow: View {
             } else {
                 ProgressView()
                     .progressViewStyle(.linear)
-                    .accessibilityLabel(job.title)
+                    .accessibilityLabel(job.displayTitle)
                 Text("Starting…")
                     .font(.caption)
                     .foregroundStyle(.secondary)

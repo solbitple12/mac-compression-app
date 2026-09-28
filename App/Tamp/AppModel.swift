@@ -41,6 +41,16 @@ final class AppModel {
         registry.engine(for: choice.format)?.hint(for: choice.step, options: ArchiveOptions())
     }
 
+    /// False for plain TAR, which only bundles files.
+    var hasSpeedSteps: Bool {
+        choice.format != .tar
+    }
+
+    /// The step the slider shows: Store for plain TAR, whatever was chosen for the others.
+    var effectiveStep: SpeedStep {
+        hasSpeedSteps ? choice.step : .store
+    }
+
     func select(format: ArchiveFormat) {
         choice.format = format
         settings.archiveChoice = choice

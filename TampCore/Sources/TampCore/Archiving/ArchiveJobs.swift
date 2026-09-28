@@ -16,8 +16,8 @@ public enum ArchiveJobs {
         on queue: JobQueue,
         willWrite: OutputFolderHandler? = nil
     ) async -> JobID {
-        let title = "Compressing \(ArchivePlanner.displayName(for: request.items)) as \(engine.format.title)"
-        return await queue.enqueue(title: title, totalBytes: 0) { context in
+        let subject = "\(ArchivePlanner.displayName(for: request.items)) as \(engine.format.title)"
+        return await queue.enqueue(title: "Compressing \(subject)", finishedTitle: "Compressed \(subject)", totalBytes: 0) { context in
             let totalBytes = InputSize.totalBytes(of: request.items)
             try Task.checkCancellation()
             await context.setTotalBytes(totalBytes)
@@ -35,8 +35,8 @@ public enum ArchiveJobs {
         willWrite: OutputFolderHandler? = nil
     ) async -> JobID {
         let totalBytes = Int64((try? request.archive.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        let title = "Extracting \(ArchivePlanner.displayName(for: [request.archive]))"
-        return await queue.enqueue(title: title, totalBytes: totalBytes) { context in
+        let subject = ArchivePlanner.displayName(for: [request.archive])
+        return await queue.enqueue(title: "Extracting \(subject)", finishedTitle: "Extracted \(subject)", totalBytes: totalBytes) { context in
             willWrite?(request.destinationDirectory)
             let output = try await engine.extract(request, progress: context.progressHandler(totalBytes: totalBytes))
             await context.reportOutput(output)

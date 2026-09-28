@@ -28,10 +28,18 @@ public enum JobState: Equatable, Sendable {
 
 public struct JobSnapshot: Equatable, Sendable, Identifiable {
     public var id: JobID
+    /// Describes the job while it waits or runs, such as "Compressing “Photos” as ZIP".
     public var title: String
+    /// Replaces `title` once the job has finished, such as "Compressed “Photos” as ZIP".
+    public var finishedTitle: String?
     public var state: JobState
     /// The archive or extracted item a finished job produced, for "Show in Finder".
     public var output: URL?
+
+    /// The title to show for the job's current state.
+    public var displayTitle: String {
+        state == .finished ? finishedTitle ?? title : title
+    }
 }
 
 /// Handed to a running job so it can report progress without touching the queue's internals.
@@ -97,18 +105,20 @@ public actor JobQueue {
     }
 
     /// - Parameters:
+    ///   - finishedTitle: What the title becomes once the job has finished.
     ///   - totalBytes: Input size, used for % done and the ETA; 0 when unknown.
     ///   - initialEstimate: Seconds predicted before start, blended into the early ETA.
     @discardableResult
     public func enqueue(
         title: String,
+        finishedTitle: String? = nil,
         totalBytes: Int64,
         initialEstimate: TimeInterval? = nil,
         work: @escaping Work
     ) -> JobID {
         let id = JobID()
         entries[id] = Entry(
-            snapshot: JobSnapshot(id: id, title: title, state: isShutDown ? .cancelled : .queued),
+            snapshot: JobSnapshot(id: id, title: title, finishedTitle: finishedTitle, state: isShutDown ? .cancelled : .queued),
             totalBytes: totalBytes,
             initialEstimate: initialEstimate,
             work: work

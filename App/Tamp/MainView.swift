@@ -64,7 +64,9 @@ struct ArchiveSettingsView: View {
             .fixedSize()
             .accessibilityIdentifier("formatPicker")
 
-            SpeedSlider(step: Binding(get: { model.choice.step }, set: { model.select(step: $0) }))
+            // Plain TAR has nothing to tune, so its slider stays on Store.
+            SpeedSlider(step: Binding(get: { model.effectiveStep }, set: { model.select(step: $0) }))
+                .disabled(!model.hasSpeedSteps)
 
             if let hint = model.hint {
                 VStack(alignment: .leading, spacing: 4) {
