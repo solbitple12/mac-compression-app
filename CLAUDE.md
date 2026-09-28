@@ -103,8 +103,9 @@ locally first and use CI as the final check.
   stop, resumable batches.
 - Known issues are listed in README's "Known issues". Also: only the owner's Mac can check
   Finder drag, the Choose panel, quitting while a job runs, and a real notarized release.
-  The Phase 2c UI (hint, sheets, pause dialog, gauge) hasn't been through the UI smoke test
-  yet; add the `full-ci` label once to check it.
+  The full CI set (build and tests, UI smoke test, release dry run) passed at commit 542167c.
+  The Phase 2c UI (hint, sheets, pause dialog, gauge) has been exercised by CI but not yet
+  looked at by a person.
 
 ## Next phases (stop for review after each)
 
