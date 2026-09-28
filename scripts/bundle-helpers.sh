@@ -24,12 +24,15 @@ for tool in "${tools[@]}"; do
   fi
 done
 
+identity="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+# Notarization needs a secure timestamp; an ad-hoc signature can't have one.
+if [ "$identity" = "-" ]; then timestamp=--timestamp=none; else timestamp=--timestamp; fi
+
 mkdir -p "$helpers" "$licenses"
 for tool in "${tools[@]}"; do
   ditto "$source_dir/bin/$tool" "$helpers/$tool"
   if [ "${CODE_SIGNING_ALLOWED:-NO}" = "YES" ]; then
-    codesign --force --options runtime --timestamp=none \
-      --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" "$helpers/$tool"
+    codesign --force --options runtime "$timestamp" --sign "$identity" "$helpers/$tool"
   fi
 done
 ditto "$source_dir/licenses" "$licenses"

@@ -69,3 +69,18 @@ jobs:
             echo "Tamp exited during launch with status $status"; exit 1
           fi
           kill "$pid"
+
+  release-dry-run:
+    name: Release dry run
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore built helpers
+        uses: actions/cache@v4
+        with:
+          path: build/helpers
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh') }}
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build a Release app and run the notarization checks
+        run: scripts/release.sh --dry-run

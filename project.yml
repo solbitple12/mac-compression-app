@@ -34,11 +34,16 @@ targets:
         # Developer ID outside the App Store: hardened runtime on, no sandbox.
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
-        # Signs for this Mac only. Chunk 7 adds the Developer ID signing setup.
+        # Signs for this Mac only by default. scripts/release.sh passes the
+        # Developer ID identity and team instead (docs/signing-and-notarization.md).
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         # The helper script reads build/helpers, outside the sandboxed script inputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        Release:
+          # No get-task-allow entitlement: notarization rejects it.
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
     postBuildScripts:
       - name: Bundle helpers
         script: '"$SRCROOT/scripts/bundle-helpers.sh"'

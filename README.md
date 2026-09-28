@@ -21,7 +21,9 @@ Work in progress. Phase 1 is being built in small steps.
 | `scripts/make-corpus.sh` | Regenerates the corpus; it's committed, so only needed when it changes |
 | `scripts/build-helpers.sh` | Downloads, verifies and builds the bundled helper tools as universal binaries |
 | `scripts/bundle-helpers.sh` | Xcode build phase that copies and signs the helpers into the app |
-| `.github/workflows/ci.yml` | Builds the helpers, tests `TampCore`, then builds, checks and launches the app on a macOS runner |
+| `scripts/release.sh` | Release build, Developer ID signing, notarization and stapling; `--dry-run` checks without a certificate |
+| `docs/signing-and-notarization.md` | One-time setup and release steps for a notarized Developer ID build |
+| `.github/workflows/ci.yml` | Builds the helpers, tests `TampCore`, builds, checks and launches the app, and runs the release dry run on macOS runners |
 
 ## Build and test
 
@@ -45,7 +47,9 @@ open Tamp.xcodeproj
 ```
 
 The build copies the helpers into `Tamp.app/Contents/Helpers` and signs the app for
-this Mac only. Developer ID signing and notarization come next.
+this Mac only. To make a build others can download, see
+[Signing and notarizing Tamp](docs/signing-and-notarization.md);
+`scripts/release.sh --dry-run` runs its checks without a certificate.
 
 Drop files or folders on the window, pick a format and a speed step, and press
 Compress. Dropping only archives Tamp can open (ZIP, TAR.ZST, TAR) extracts them
