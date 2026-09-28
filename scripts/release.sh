@@ -14,6 +14,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/helper-list.sh"
 OUT="$ROOT/build/release"
 DERIVED="$OUT/DerivedData"
 MIN_MACOS=14.0
@@ -62,7 +63,8 @@ APP="$OUT/Tamp.app"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 
 step "Checking the bundle"
-executables=("$APP/Contents/MacOS/Tamp" "$APP/Contents/Helpers/7zz" "$APP/Contents/Helpers/bsdtar" "$APP/Contents/Helpers/zstd")
+executables=("$APP/Contents/MacOS/Tamp")
+for helper in "${TAMP_HELPERS[@]}"; do executables+=("$APP/Contents/Helpers/$helper"); done
 for exe in "${executables[@]}"; do
   name="${exe#"$APP/"}"
   [ -x "$exe" ] || fail "$name is missing"
@@ -98,7 +100,7 @@ if grep -q get-task-allow <<<"$entitlements"; then
 fi
 [ "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")" = "$MIN_MACOS" ] \
   || fail "LSMinimumSystemVersion isn't $MIN_MACOS"
-for license in 7-Zip.txt 7-Zip-unRAR.txt zstd.txt libarchive.txt; do
+for license in "${TAMP_LICENSES[@]}"; do
   [ -s "$APP/Contents/Resources/Licenses/$license" ] || fail "license $license is missing"
 done
 codesign --verify --deep --strict --verbose=2 "$APP"

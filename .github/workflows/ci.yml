@@ -48,13 +48,14 @@ jobs:
           -destination 'platform=macOS' -derivedDataPath build/DerivedData build
       - name: Check the bundle
         run: |
+          source scripts/helper-list.sh
           app=build/DerivedData/Build/Products/Debug/Tamp.app
-          for tool in 7zz bsdtar zstd; do
+          for tool in "${TAMP_HELPERS[@]}"; do
             test -x "$app/Contents/Helpers/$tool"
             codesign --verify --strict "$app/Contents/Helpers/$tool"
           done
           ls "$app/Contents/Resources/Licenses"
-          for license in 7-Zip.txt 7-Zip-unRAR.txt zstd.txt libarchive.txt; do
+          for license in "${TAMP_LICENSES[@]}"; do
             test -s "$app/Contents/Resources/Licenses/$license"
           done
           codesign --verify --deep --strict --verbose=2 "$app"

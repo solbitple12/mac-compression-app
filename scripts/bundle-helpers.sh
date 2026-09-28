@@ -8,10 +8,11 @@
 # Release builds fail.
 set -euo pipefail
 
+source "$SRCROOT/scripts/helper-list.sh"
 source_dir="${TAMP_HELPERS_OUT:-$SRCROOT/build/helpers}"
 helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
 licenses="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Licenses"
-tools=(7zz bsdtar zstd)
+tools=("${TAMP_HELPERS[@]}")
 
 for tool in "${tools[@]}"; do
   if [ ! -x "$source_dir/bin/$tool" ]; then
