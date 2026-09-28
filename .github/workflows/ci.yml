@@ -8,6 +8,8 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+    # Notes and docs alone don't need a Mac.
+    paths-ignore: ["**.md", "docs/**"]
 
 concurrency:
   # Labeling a pull request mustn't cancel the build of its latest push.
