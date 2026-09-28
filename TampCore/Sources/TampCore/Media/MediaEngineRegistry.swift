@@ -20,7 +20,8 @@ public struct MediaEngineRegistry: Sendable {
                 JxlEngine(helpers: helpers), AvifEngine(helpers: helpers),
             ],
             audioEngines: [
-                FlacEngine(helpers: helpers), WavPackEngine(helpers: helpers), AACEngine(), ALACEngine(), LameEngine(helpers: helpers),
+                FlacEngine(helpers: helpers), WavPackEngine(helpers: helpers), AACEngine(), ALACEngine(),
+                LameEngine(helpers: helpers), OpusEngine(helpers: helpers),
             ]
         )
     }

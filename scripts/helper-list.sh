@@ -7,7 +7,7 @@
 # of SVT-AV1's own CMake; Tamp links its library into a future avifenc instead
 # of shelling out to this CLI). Neither is bundled into the app.
 # shellcheck disable=SC2034
-TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac wavpack lame cjxl djxl avifenc)
+TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac wavpack lame cjxl djxl avifenc opusenc)
 
 # shellcheck disable=SC2034
 TAMP_LICENSES=(
@@ -31,4 +31,9 @@ TAMP_LICENSES=(
   libjxl.txt
   libavif.txt
   SVT-AV1.txt
+  opus.txt
+  ogg.txt
+  libopusenc.txt
+  opusfile.txt
+  opus-tools.txt
 )

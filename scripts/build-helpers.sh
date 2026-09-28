@@ -125,6 +125,25 @@ OPUS_VERSION=1.6.1
 OPUS_GIT=https://github.com/xiph/opus
 OPUS_COMMIT=22244de5a79bd1d6d623c32e72bf1954b56235be
 
+OGG_VERSION=1.3.6
+OGG_GIT=https://github.com/xiph/ogg
+OGG_COMMIT=db03f952b25717fd5c4938817c9290837a4ae1b2
+
+# Neither has a vendored configure script in git (only in their release tarballs),
+# so their build runs autogen.sh: a real autoreconf bootstrap, the only one in
+# this script.
+LIBOPUSENC_VERSION=0.2.1
+LIBOPUSENC_GIT=https://github.com/xiph/libopusenc
+LIBOPUSENC_COMMIT=6b80503f263ebbc6479fb346c0e31dc4619b6f8c
+
+OPUSFILE_VERSION=0.12
+OPUSFILE_GIT=https://github.com/xiph/opusfile
+OPUSFILE_COMMIT=f07833584e66c4409d1eb7ea616b3ac42e1edeef
+
+OPUSTOOLS_VERSION=0.2
+OPUSTOOLS_GIT=https://github.com/xiph/opus-tools
+OPUSTOOLS_COMMIT=18384b5e6e638db12a8c04aded64f6ebb42db917
+
 WAVPACK_VERSION=5.9.0
 WAVPACK_GIT=https://github.com/dbry/WavPack
 WAVPACK_COMMIT=5803634a030e2a11dba602ba057b89cc34486c67
@@ -764,6 +783,154 @@ build_libavif() {
   stamp avifenc "$LIBAVIF_VERSION"
 }
 
+# libogg into deps/, for Opus's opus-tools chain. Pure C, no SIMD, so the ordinary
+# single-pass universal build is fine.
+build_ogg() {
+  local stamp="$DEPS/.ogg-$OGG_VERSION"
+  [[ -f "$stamp" ]] && { echo "libogg $OGG_VERSION is already built"; return; }
+  local dir="$SRC/ogg-$OGG_VERSION"
+  fetch_git "$OGG_GIT" "v$OGG_VERSION" "$OGG_COMMIT" "$dir"
+  echo "Building libogg $OGG_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_INSTALL_PREFIX="$DEPS" -DINSTALL_DOCS=OFF >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target ogg >/dev/null
+  cmake --install "$dir/out" >/dev/null
+  cp "$dir/COPYING" "$LICENSES/ogg.txt"
+  touch "$stamp"
+}
+
+# libopus into deps/. Its x86/NEON paths are picked by CMAKE_SYSTEM_PROCESSOR-style
+# checks, the same class of bug that broke libwebp's single-pass build, so the
+# same per-architecture build and lipo here too, defensively.
+build_opus() {
+  local stamp="$DEPS/.opus-$OPUS_VERSION"
+  [[ -f "$stamp" ]] && { echo "libopus $OPUS_VERSION is already built"; return; }
+  local dir="$SRC/opus-$OPUS_VERSION"
+  fetch_git "$OPUS_GIT" "v$OPUS_VERSION" "$OPUS_COMMIT" "$dir"
+  local libs=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building libopus $OPUS_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_INSTALL_PREFIX="$prefix" \
+      -DOPUS_BUILD_SHARED_LIBRARY=OFF -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF >/dev/null
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target opus >/dev/null
+    cmake --install "$dir/out-$arch" >/dev/null
+    local library
+    library="$(find "$prefix/lib" -type f -name 'libopus.a' | head -1)"
+    [[ -n "$library" ]] || { echo "libopus built for $arch but libopus.a wasn't found under $prefix/lib" >&2; exit 1; }
+    libs+=("$library")
+  done
+  mkdir -p "$DEPS/include" "$DEPS/lib/pkgconfig"
+  cp -R "$dir/install-arm64/include/." "$DEPS/include/"
+  cp "$dir"/install-arm64/lib/pkgconfig/*.pc "$DEPS/lib/pkgconfig/"
+  lipo -create -output "$DEPS/lib/libopus.a" "${libs[@]}"
+  cp "$dir/COPYING" "$LICENSES/opus.txt"
+  touch "$stamp"
+}
+
+# libopusenc into deps/: opusenc's own encoder layer over libopus. Neither this
+# nor opusfile/opus-tools below has a vendored configure script in git (only in
+# their release tarballs), so each runs autogen.sh first, a real autoreconf
+# bootstrap. Their own SIMD, if any, is inside libopus already; these are plain C.
+build_libopusenc() {
+  local stamp="$DEPS/.libopusenc-$LIBOPUSENC_VERSION"
+  [[ -f "$stamp" ]] && { echo "libopusenc $LIBOPUSENC_VERSION is already built"; return; }
+  local dir="$SRC/libopusenc-$LIBOPUSENC_VERSION"
+  fetch_git "$LIBOPUSENC_GIT" "v$LIBOPUSENC_VERSION" "$LIBOPUSENC_COMMIT" "$dir"
+  echo "Bootstrapping libopusenc $LIBOPUSENC_VERSION"
+  (cd "$dir" && PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" ./autogen.sh >/dev/null)
+  local libs=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building libopusenc $LIBOPUSENC_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    mkdir -p "$dir/build-$arch"
+    (
+      cd "$dir/build-$arch"
+      PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" CC="clang -arch $arch" CFLAGS="-O2" \
+        ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
+        --disable-shared --enable-static --disable-doc >/dev/null
+      make -j"$JOBS" >/dev/null
+      make install >/dev/null
+    )
+    libs+=("$prefix/lib/libopusenc.a")
+  done
+  mkdir -p "$DEPS/include" "$DEPS/lib/pkgconfig"
+  cp -R "$dir/install-arm64/include/." "$DEPS/include/"
+  cp "$dir"/install-arm64/lib/pkgconfig/*.pc "$DEPS/lib/pkgconfig/"
+  lipo -create -output "$DEPS/lib/libopusenc.a" "${libs[@]}"
+  cp "$dir/COPYING" "$LICENSES/libopusenc.txt"
+  touch "$stamp"
+}
+
+# opusfile into deps/: opus-tools needs it (and its opusurl.la sibling, always
+# built alongside it) even though Tamp only ever writes Opus, never opens one.
+# --disable-http skips needing libcurl/openssl; opusurl.pc still gets installed
+# either way, which is all opus-tools' configure actually checks for.
+build_opusfile() {
+  local stamp="$DEPS/.opusfile-$OPUSFILE_VERSION"
+  [[ -f "$stamp" ]] && { echo "opusfile $OPUSFILE_VERSION is already built"; return; }
+  local dir="$SRC/opusfile-$OPUSFILE_VERSION"
+  fetch_git "$OPUSFILE_GIT" "v$OPUSFILE_VERSION" "$OPUSFILE_COMMIT" "$dir"
+  echo "Bootstrapping opusfile $OPUSFILE_VERSION"
+  (cd "$dir" && PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" ./autogen.sh >/dev/null)
+  local libs=() url_libs=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building opusfile $OPUSFILE_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    mkdir -p "$dir/build-$arch"
+    (
+      cd "$dir/build-$arch"
+      PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" CC="clang -arch $arch" CFLAGS="-O2" \
+        ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
+        --disable-shared --enable-static --disable-http --disable-examples --disable-doc >/dev/null
+      make -j"$JOBS" >/dev/null
+      make install >/dev/null
+    )
+    libs+=("$prefix/lib/libopusfile.a")
+    url_libs+=("$prefix/lib/libopusurl.a")
+  done
+  mkdir -p "$DEPS/include" "$DEPS/lib/pkgconfig"
+  cp -R "$dir/install-arm64/include/." "$DEPS/include/"
+  cp "$dir"/install-arm64/lib/pkgconfig/*.pc "$DEPS/lib/pkgconfig/"
+  lipo -create -output "$DEPS/lib/libopusfile.a" "${libs[@]}"
+  lipo -create -output "$DEPS/lib/libopusurl.a" "${url_libs[@]}"
+  cp "$dir/COPYING" "$LICENSES/opusfile.txt"
+  touch "$stamp"
+}
+
+# opusenc, for Opus. --without-flac: Tamp's own flac helper is a CLI, not an
+# installed library opus-tools' configure could link against, and Tamp doesn't
+# need opusenc's FLAC-input support anyway (FlacEngine already covers FLAC).
+# opusdec and opusinfo get built too (Makefile.am always builds all three
+# together) but aren't bundled: Tamp only ever writes Opus, never opens one.
+build_opustools() {
+  built opusenc "$OPUSTOOLS_VERSION" && return
+  local dir="$SRC/opus-tools-$OPUSTOOLS_VERSION"
+  fetch_git "$OPUSTOOLS_GIT" "v$OPUSTOOLS_VERSION" "$OPUSTOOLS_COMMIT" "$dir"
+  echo "Bootstrapping opus-tools $OPUSTOOLS_VERSION"
+  (cd "$dir" && PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" ./autogen.sh >/dev/null)
+  local slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building opus-tools $OPUSTOOLS_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    mkdir -p "$dir/build-$arch"
+    (
+      cd "$dir/build-$arch"
+      PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" CC="clang -arch $arch" CFLAGS="-O2" \
+        ../configure --host="$(host_for "$arch")" --prefix="$prefix" --without-flac >/dev/null
+      make -j"$JOBS" >/dev/null
+      make install >/dev/null
+    )
+    local opusenc_binary
+    opusenc_binary="$(find "$prefix/bin" -type f -name opusenc -perm +111 | head -1)"
+    [[ -n "$opusenc_binary" ]] || { echo "opus-tools built for $arch but opusenc wasn't found under $prefix/bin" >&2; exit 1; }
+    slices+=("$opusenc_binary")
+  done
+  lipo -create -output "$BIN/opusenc" "${slices[@]}"
+  cp "$dir/COPYING" "$LICENSES/opus-tools.txt"
+  stamp opusenc "$OPUSTOOLS_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -783,3 +950,8 @@ build_svtav1
 build_highway
 build_libjxl
 build_libavif
+build_ogg
+build_opus
+build_libopusenc
+build_opusfile
+build_opustools

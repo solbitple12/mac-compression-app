@@ -5,7 +5,8 @@ media re-encoding, and a "Recommend for me" mode. macOS 14+, Swift and SwiftUI,
 distributed as a notarized Developer ID app.
 
 Work in progress: Phases 1 and 2 (all archive formats, advanced options, estimates and
-safety checks) are done; images and audio come next. `CLAUDE.md` has notes for working on it.
+safety checks) are done. Phase 3's codecs (images and audio) are all built; its batch
+UI comes next. `CLAUDE.md` has notes for working on it.
 
 ## Layout
 
@@ -195,6 +196,7 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 | [libjxl](https://github.com/libjxl/libjxl) (`cjxl`, `djxl`) | 0.12.0 | JPEG XL | BSD 3-clause; pulls in [Highway](https://github.com/google/highway) (Apache-2.0/BSD 3-clause) and [skcms](https://github.com/google/skcms) (BSD 3-clause) |
 | [SVT-AV1](https://github.com/AOMediaCodec/SVT-AV1) | 4.2.0 | AVIF's AV1 encoder (statically linked into `avifenc`); Phase 4's video too | BSD 3-clause Clear plus the AOM patent license |
 | [libavif](https://github.com/AOMediaCodec/libavif) (`avifenc`) | 1.4.2 | AVIF, encode only (no bundled decoder yet) | BSD 2-clause; its own CMake fetches and statically links zlib, libpng and libjpeg-turbo to read source images, each zlib/BSD/IJG-licensed — their exact license texts still need capturing here before a real release |
+| [opus-tools](https://github.com/xiph/opus-tools) (`opusenc`) | 0.2 | Opus | BSD 2-clause; statically links [libopus](https://github.com/xiph/opus) (BSD 3-clause), [libogg](https://github.com/xiph/ogg) (BSD-style) and [libopusenc](https://github.com/xiph/libopusenc) (BSD 3-clause) |
 
 Tamp patches three of them, with the patches in `scripts/patches`: minizip-ng (store link
 targets the Info-ZIP way, skip Mac junk files, read the password from stdin, mark archives
@@ -206,17 +208,20 @@ from Homebrew). None of the components is GPL-only.
 LGPL's source-availability requirement. The unRAR restriction forbids using that code
 to recreate the RAR compression algorithm; Tamp only extracts RAR.
 
-Phase 3 (images and audio) is under way. oxipng, mozjpeg, libwebp, HEIC, FLAC,
-WavPack, AAC, ALAC, LAME, libjxl, SVT-AV1 and libavif are built and bundled (or,
-for AAC/ALAC/HEIC, need nothing to bundle), in the table above. JPEG XL's lossless
-JPEG rewrap verifies itself: after encoding, Tamp decodes the JXL back to a JPEG
-with djxl and compares it byte for byte against the original before calling the
-job done. AVIF is encode only for now: dav1d (AV1 decode, for the before/after
-preview) isn't built, so nothing in Tamp can open or preview an AVIF it just wrote.
+Phase 3 (images and audio) is now fully built and bundled: oxipng, mozjpeg,
+libwebp, HEIC, FLAC, WavPack, AAC, ALAC, LAME, libjxl, SVT-AV1, libavif and
+opus-tools, all in the table above (or, for AAC/ALAC/HEIC, need nothing to
+bundle). JPEG XL's lossless JPEG rewrap verifies itself: after encoding, Tamp
+decodes the JXL back to a JPEG with djxl and compares it byte for byte against
+the original before calling the job done. AVIF is encode only for now: dav1d
+(AV1 decode, for the before/after preview) isn't built, so nothing in Tamp can
+open or preview an AVIF it just wrote. opusenc needed libogg, libopusenc and
+opusfile besides libopus itself, with libopusenc and opus-tools needing a real
+autotools bootstrap (no vendored `configure` in their git history, unlike every
+other Phase 3 source) — the only components of the app that aren't built with
+CMake, a vendored `configure`, or Cargo.
 
-Only Opus is left unbuilt, still pinned in `scripts/build-helpers.sh` with no
-`build_` function: it turned out to need more than expected. opusenc has no CMake
-build and needs libogg, libopusenc and opusfile besides libopus itself, with
-libopusenc and opus-tools needing a real autotools bootstrap (no vendored
-`configure` in their git history) rather than the CMake or ready-made `configure`
-every other Phase 3 source has had so far.
+Still ahead: the batch UI, previews, per-file savings and metadata toggles in
+`App/Tamp` (nothing there has changed this phase yet), and the benchmark pass
+that Phase 2a ran for archive formats, to replace the speed-step mappings above
+marked as starting points with real measurements.
