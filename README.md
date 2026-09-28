@@ -4,7 +4,8 @@ A native macOS compression app: archive formats with a six-step speed slider,
 media re-encoding, and a "Recommend for me" mode. macOS 14+, Swift and SwiftUI,
 distributed as a notarized Developer ID app.
 
-Work in progress. Phase 1 is being built in small steps.
+Work in progress: Phases 1 and 2 (all archive formats, advanced options, estimates and
+safety checks) are done; images and audio come next. `CLAUDE.md` has notes for working on it.
 
 ## Layout
 
@@ -15,6 +16,8 @@ Work in progress. Phase 1 is being built in small steps.
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping |
 | `TampCore/Sources/TampCore/Archiving/` | Engine registry, archive detection by first bytes, what a drop does, output names |
+| `TampCore/Sources/TampCore/Estimation/` | Input scan, time/size/memory estimates from short probes, thread scaling, local history |
+| `TampCore/Sources/TampCore/Safety/` | Memory, swap and disk sampling, the resource monitor that pauses and stops jobs, pre-flight checks |
 | `TampCore/Sources/TampCore/Settings/` | Last format and speed step, recent output folders |
 | `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner and pipelines, safe temp-file output, error messages |
 | `TampCore/Tests/TampCoreTests/Corpus/` | Sample files for the byte-for-byte round-trip tests (text, binary, JPEG, PNG, WAV, MP4) |
