@@ -33,6 +33,25 @@ public enum QualityPreset: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// A preset-to-percentage mapping (0 to 100) shared by every image engine with a
+/// plain 0-100 quality knob and no better source-specific curve of its own.
+public enum ImageQualityMapping {
+    public static func percent(for value: MediaQuality) -> Int {
+        switch value {
+        case .lossless: 100 // callers with a real lossless mode branch before reaching this.
+        case let .preset(preset):
+            switch preset {
+            case .low: 50
+            case .medium: 70
+            case .high: 85
+            case .veryHigh: 95
+            }
+        case let .customQuality(value): Int(min(100, max(0, value)).rounded())
+        case .customBitrate: 85 // no bitrate mode; falls back to High.
+        }
+    }
+}
+
 /// What happens to a file's embedded metadata on re-encode. Metadata stays by
 /// default; the two stripping modes are separate toggles in the batch panel.
 public enum MetadataHandling: String, CaseIterable, Codable, Sendable {

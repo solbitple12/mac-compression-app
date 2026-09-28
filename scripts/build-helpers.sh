@@ -471,7 +471,10 @@ build_mozjpeg() {
   local dir="$SRC/mozjpeg-$MOZJPEG_VERSION"
   fetch_git "$MOZJPEG_GIT" "v$MOZJPEG_VERSION" "$MOZJPEG_COMMIT" "$dir"
   echo "Building mozjpeg $MOZJPEG_VERSION"
-  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" \
+  # mozjpeg's own cmake_minimum_required predates CMake 3.5, which current CMake
+  # refuses to honor at all; this just accepts the old policies rather than the
+  # (removed) old behavior itself, which is fine for a plain C build like this one.
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_JPEG8=1 -DPNG_SUPPORTED=OFF -DWITH_TURBOJPEG=OFF >/dev/null
   cmake --build "$dir/out" -j"$JOBS" --target cjpeg djpeg jpegtran >/dev/null
   cp "$dir/out/cjpeg" "$BIN/cjpeg"
@@ -489,7 +492,7 @@ build_libwebp() {
   local dir="$SRC/libwebp-$LIBWEBP_VERSION"
   fetch_git "$LIBWEBP_GIT" "v$LIBWEBP_VERSION" "$LIBWEBP_COMMIT" "$dir"
   echo "Building libwebp $LIBWEBP_VERSION"
-  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" \
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DWEBP_BUILD_CWEBP=ON -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
     -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
     -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF >/dev/null

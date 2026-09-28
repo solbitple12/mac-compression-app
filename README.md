@@ -187,6 +187,7 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 | [oxipng](https://github.com/oxipng/oxipng) (`oxipng`) | 10.2.1 | PNG | MIT |
 | [mozjpeg](https://github.com/mozilla/mozjpeg) (`cjpeg`, `djpeg`, `jpegtran`) | 4.1.5 | JPEG | IJG license, BSD 3-clause, zlib license |
 | [libwebp](https://github.com/webmproject/libwebp) (`cwebp`) | 1.6.0 | WebP | BSD 3-clause |
+| Apple's ImageIO framework | — | HEIC | System framework; nothing bundled |
 
 Tamp patches three of them, with the patches in `scripts/patches`: minizip-ng (store link
 targets the Info-ZIP way, skip Mac junk files, read the password from stdin, mark archives

@@ -27,18 +27,7 @@ public enum WebPMapping {
     }
 
     public static func quality(for value: MediaQuality) -> Int {
-        switch value {
-        case .lossless: 100 // unused: -lossless is passed instead of a quality number.
-        case let .preset(preset):
-            switch preset {
-            case .low: 50
-            case .medium: 70
-            case .high: 85
-            case .veryHigh: 95
-            }
-        case let .customQuality(value): Int(min(100, max(0, value)).rounded())
-        case .customBitrate: 85 // cwebp has no target-bitrate mode; falls back to High.
-        }
+        ImageQualityMapping.percent(for: value) // unused for .lossless: -lossless is passed instead.
     }
 
     /// cwebp strips every metadata block by default; `-metadata all` is the only

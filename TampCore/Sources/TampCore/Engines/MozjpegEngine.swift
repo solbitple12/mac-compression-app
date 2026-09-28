@@ -5,18 +5,7 @@ import Foundation
 /// for JPEG; only the quality matters.
 public enum MozjpegMapping {
     public static func quality(for value: MediaQuality) -> Int {
-        switch value {
-        case .lossless: 100 // unused: lossless goes through jpegtran, not cjpeg.
-        case let .preset(preset):
-            switch preset {
-            case .low: 50
-            case .medium: 70
-            case .high: 85
-            case .veryHigh: 95
-            }
-        case let .customQuality(value): Int(min(100, max(0, value)).rounded())
-        case .customBitrate: 85 // JPEG has no bitrate mode; falls back to High.
-        }
+        ImageQualityMapping.percent(for: value)
     }
 }
 
