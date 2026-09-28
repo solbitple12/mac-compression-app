@@ -728,9 +728,14 @@ build_svtav1() {
     cmake --build "$dir/out-$arch" -j"$JOBS" --target SvtAv1EncApp SvtAv1Enc >/dev/null
     cmake --install "$dir/out-$arch" --component Runtime >/dev/null
     cmake --install "$dir/out-$arch" --component Development >/dev/null
+    # Not under out-$arch: its CMakeLists writes runtime output to Bin/Release
+    # relative to the *source* directory (shared by both architectures' builds,
+    # so it'd overwrite itself between passes), rather than under the build
+    # directory. The install step above already copied the real per-architecture
+    # binary into $prefix/bin, so look there instead.
     local app_binary
-    app_binary="$(find "$dir/out-$arch" -type f -name SvtAv1EncApp -perm +111 | head -1)"
-    [[ -n "$app_binary" ]] || { echo "SVT-AV1 built for $arch but SvtAv1EncApp wasn't found under $dir/out-$arch" >&2; exit 1; }
+    app_binary="$(find "$prefix/bin" -type f -name SvtAv1EncApp -perm +111 | head -1)"
+    [[ -n "$app_binary" ]] || { echo "SVT-AV1 built for $arch but SvtAv1EncApp wasn't found under $prefix/bin" >&2; exit 1; }
     app_slices+=("$app_binary")
   done
   lipo -create -output "$BIN/SvtAv1EncApp" "${app_slices[@]}"
