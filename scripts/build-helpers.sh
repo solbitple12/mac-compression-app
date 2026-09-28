@@ -629,7 +629,9 @@ build_flac() {
   cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DBUILD_SHARED_LIBS=OFF -DBUILD_CXXLIBS=OFF -DBUILD_PROGRAMS=ON -DBUILD_EXAMPLES=OFF \
     -DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DINSTALL_MANPAGES=OFF -DWITH_OGG=OFF >/dev/null
-  cmake --build "$dir/out" -j"$JOBS" --target flac >/dev/null
+  # The CLI's actual target is "flacapp" (renamed to the "flac" binary via
+  # RUNTIME_OUTPUT_NAME); plain "flac" isn't a target name CMake recognizes here.
+  cmake --build "$dir/out" -j"$JOBS" --target flacapp >/dev/null
   # Its exact spot under out/ isn't pinned by the CMakeLists, so find it rather
   # than guess a nested path that could move between versions.
   local built_binary
