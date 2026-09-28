@@ -187,7 +187,7 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 | [minizip-ng](https://github.com/zlib-ng/minizip-ng) (`minizip`) | 4.2.2 | Writing Zstandard inside ZIP | zlib license |
 | [oxipng](https://github.com/oxipng/oxipng) (`oxipng`) | 10.2.1 | PNG | MIT |
 | [mozjpeg](https://github.com/mozilla/mozjpeg) (`cjpeg`, `djpeg`, `jpegtran`) | 4.1.5 | JPEG | IJG license, BSD 3-clause, zlib license |
-| [libwebp](https://github.com/webmproject/libwebp) (`cwebp`) | 1.6.0 | WebP | BSD 3-clause |
+| [libwebp](https://github.com/webmproject/libwebp) (`cwebp`) | 1.6.0 | WebP | BSD 3-clause; statically links mozjpeg's own libjpeg (see above) and [libpng](https://github.com/pnggroup/libpng) 1.6.58 (libpng license) to read source images |
 | Apple's ImageIO framework | — | HEIC | System framework; nothing bundled |
 | [FLAC](https://github.com/xiph/flac) (`flac`) | 1.5.0 | FLAC | BSD-style (Xiph) |
 | [WavPack](https://github.com/dbry/WavPack) (`wavpack`) | 5.9.0 | WavPack | BSD 3-clause |

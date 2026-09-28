@@ -24,6 +24,7 @@ TAMP_LICENSES=(
   oxipng.txt
   mozjpeg.txt
   libwebp.txt
+  libpng.txt
   flac.txt
   wavpack.txt
   lame.txt

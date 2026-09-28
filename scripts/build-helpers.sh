@@ -87,6 +87,12 @@ LIBWEBP_VERSION=1.6.0
 LIBWEBP_GIT=https://github.com/webmproject/libwebp
 LIBWEBP_COMMIT=4fa21912338357f89e4fd51cf2368325b59e9bd9
 
+# cwebp reads PNG source images through this; mozjpeg's own jpeg-static output
+# covers the JPEG side (see build_mozjpeg).
+LIBPNG_VERSION=1.6.58
+LIBPNG_GIT=https://github.com/pnggroup/libpng
+LIBPNG_COMMIT=3061454d980de7d53608f594194cfac722721d2a
+
 LIBAVIF_VERSION=1.4.2
 LIBAVIF_GIT=https://github.com/AOMediaCodec/libavif
 LIBAVIF_COMMIT=c5240fc79fe5c2407e10afd35f5505ef6333ea49
@@ -506,7 +512,7 @@ build_mozjpeg() {
   # Its SIMD is hand-written assembly, which CMake (rightly) refuses to build for
   # two architectures in one pass; one configure and build per architecture, lipo'd
   # together after, same as 7zz, xz and liblz4 above.
-  local cjpeg_slices=() djpeg_slices=() jpegtran_slices=()
+  local cjpeg_slices=() djpeg_slices=() jpegtran_slices=() jpeg_lib_slices=() jpeg_config_dir=""
   for arch in "${ARCHS[@]}"; do
     echo "Building mozjpeg $MOZJPEG_VERSION for $arch"
     # mozjpeg's own cmake_minimum_required predates CMake 3.5, which current CMake
@@ -518,22 +524,32 @@ build_mozjpeg() {
     # With ENABLE_SHARED off, its CMakeLists names the executable targets (and the
     # binaries themselves; there's no OUTPUT_NAME override) cjpeg-static and so on,
     # not the plain names --target cjpeg guessed at.
-    cmake --build "$dir/out-$arch" -j"$JOBS" --target cjpeg-static djpeg-static jpegtran-static >/dev/null
-    local cjpeg_binary djpeg_binary jpegtran_binary
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target cjpeg-static djpeg-static jpegtran-static jpeg-static >/dev/null
+    local cjpeg_binary djpeg_binary jpegtran_binary jpeg_lib
     cjpeg_binary="$(find "$dir/out-$arch" -type f -name cjpeg-static -perm +111 | head -1)"
     djpeg_binary="$(find "$dir/out-$arch" -type f -name djpeg-static -perm +111 | head -1)"
     jpegtran_binary="$(find "$dir/out-$arch" -type f -name jpegtran-static -perm +111 | head -1)"
-    if [[ -z "$cjpeg_binary" || -z "$djpeg_binary" || -z "$jpegtran_binary" ]]; then
-      echo "mozjpeg built for $arch but cjpeg-static/djpeg-static/jpegtran-static weren't found under $dir/out-$arch" >&2
+    jpeg_lib="$(find "$dir/out-$arch" -type f -name libjpeg.a | head -1)"
+    if [[ -z "$cjpeg_binary" || -z "$djpeg_binary" || -z "$jpegtran_binary" || -z "$jpeg_lib" ]]; then
+      echo "mozjpeg built for $arch but cjpeg-static/djpeg-static/jpegtran-static/libjpeg.a weren't found under $dir/out-$arch" >&2
       exit 1
     fi
     cjpeg_slices+=("$cjpeg_binary")
     djpeg_slices+=("$djpeg_binary")
     jpegtran_slices+=("$jpegtran_binary")
+    jpeg_lib_slices+=("$jpeg_lib")
+    jpeg_config_dir="$dir/out-$arch"
   done
   lipo -create -output "$BIN/cjpeg" "${cjpeg_slices[@]}"
   lipo -create -output "$BIN/djpeg" "${djpeg_slices[@]}"
   lipo -create -output "$BIN/jpegtran" "${jpegtran_slices[@]}"
+  # Also installed into deps/ as a plain libjpeg for libwebp to read JPEG source
+  # images with: mozjpeg's own jpeg-static target is API/ABI-compatible with
+  # libjpeg-turbo (which mozjpeg is a fork of) and already built per architecture
+  # right above, so this reuses it instead of building a second, separate copy.
+  mkdir -p "$DEPS/include" "$DEPS/lib"
+  lipo -create -output "$DEPS/lib/libjpeg.a" "${jpeg_lib_slices[@]}"
+  cp "$dir/jpeglib.h" "$dir/jerror.h" "$dir/jmorecfg.h" "$jpeg_config_dir/jconfig.h" "$DEPS/include/"
   cp "$dir/LICENSE.md" "$LICENSES/mozjpeg.txt"
   stamp cjpeg "$MOZJPEG_VERSION"
   stamp djpeg "$MOZJPEG_VERSION"
@@ -541,6 +557,33 @@ build_mozjpeg() {
 }
 
 # cwebp for WebP, lossy and lossless.
+# libpng into deps/, for cwebp to read PNG source images. PNG_HARDWARE_OPTIMIZATIONS
+# is the same class of per-CPU-detection risk libwebp's own SIMD turned out to be,
+# so per-architecture defensively here too.
+build_libpng() {
+  local stamp="$DEPS/.libpng-$LIBPNG_VERSION"
+  [[ -f "$stamp" ]] && { echo "libpng $LIBPNG_VERSION is already built"; return; }
+  local dir="$SRC/libpng-$LIBPNG_VERSION"
+  fetch_git "$LIBPNG_GIT" "v$LIBPNG_VERSION" "$LIBPNG_COMMIT" "$dir"
+  local libs=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building libpng $LIBPNG_VERSION for $arch"
+    cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
+      -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF >/dev/null
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target png_static >/dev/null
+    local library
+    library="$(find "$dir/out-$arch" -type f \( -name 'libpng*.a' -o -name 'png*.a' \) | head -1)"
+    [[ -n "$library" ]] || { echo "libpng built for $arch but its static library wasn't found under $dir/out-$arch" >&2; exit 1; }
+    libs+=("$library")
+  done
+  mkdir -p "$DEPS/include"
+  cp "$dir"/png.h "$dir"/pngconf.h "$dir/out-arm64"/pnglibconf.h "$DEPS/include/"
+  lipo -create -output "$DEPS/lib/libpng.a" "${libs[@]}"
+  cp "$dir/LICENSE" "$LICENSES/libpng.txt"
+  touch "$stamp"
+}
+
 build_libwebp() {
   built cwebp "$LIBWEBP_VERSION" && return
   local dir="$SRC/libwebp-$LIBWEBP_VERSION"
@@ -549,11 +592,20 @@ build_libwebp() {
   # multi-arch CMAKE_OSX_ARCHITECTURES pass (no explicit guard the way
   # libjpeg-turbo has one, but the arm64 host still mis-detects the x86_64 slice's
   # target features and breaks its SSE2 code): the same per-arch build and lipo.
+  #
+  # Building cwebp at all makes its CMakeLists look for JPEG and PNG (to read
+  # source images), and it found Homebrew's own arm64-only copies on the first
+  # try here, which broke the x86_64 pass with an architecture mismatch at the
+  # link step. Pointing JPEG/PNG explicitly at the copies this script already
+  # controls (mozjpeg's own libjpeg, and libpng above) sidesteps Homebrew
+  # entirely rather than trying to keep CMake from finding it.
   local slices=()
   for arch in "${ARCHS[@]}"; do
     echo "Building libwebp $LIBWEBP_VERSION for $arch"
     cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
       -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DJPEG_INCLUDE_DIR="$DEPS/include" -DJPEG_LIBRARY="$DEPS/lib/libjpeg.a" \
+      -DPNG_PNG_INCLUDE_DIR="$DEPS/include" -DPNG_LIBRARY="$DEPS/lib/libpng.a" \
       -DWEBP_BUILD_CWEBP=ON -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
       -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
       -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF >/dev/null
@@ -942,6 +994,7 @@ build_zpaq
 build_minizip
 build_oxipng
 build_mozjpeg
+build_libpng
 build_libwebp
 build_flac
 build_wavpack
