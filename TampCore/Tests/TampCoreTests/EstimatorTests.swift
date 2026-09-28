@@ -156,7 +156,7 @@ final class EstimatorTests: EngineTestCase {
         // 20 MiB, so the probe can only afford samples of it.
         try Self.randomData(count: 20 << 20).write(to: project.appendingPathComponent("data/large.bin"))
         let profile = try profile()
-        let engine = FakeEngine(bytesPerSecond: 20 << 20, fixedSeconds: 0.05)
+        let engine = FakeEngine(bytesPerSecond: Double(20 << 20), fixedSeconds: 0.05)
         let estimator = Estimator(history: EstimateHistory(fileURL: nil), budget: 2)
         let started = Date()
         let estimate = try await XCTUnwrapAsync(await estimator.estimate(for: profile, engine: engine, step: .normal,
@@ -173,7 +173,7 @@ final class EstimatorTests: EngineTestCase {
 
     func testMovingTheSliderBackUsesTheCache() async throws {
         let profile = try profile()
-        let engine = FakeEngine(bytesPerSecond: 100 << 20, fixedSeconds: 0.01)
+        let engine = FakeEngine(bytesPerSecond: Double(100 << 20), fixedSeconds: 0.01)
         let estimator = Estimator(history: EstimateHistory(fileURL: nil), budget: 1)
         _ = try await estimator.estimate(for: profile, engine: engine, step: .normal, options: ArchiveOptions(threads: 1))
         let runs = engine.runs.all.count
@@ -197,7 +197,7 @@ final class EstimatorTests: EngineTestCase {
 
     func testHistoryCorrectsTheEstimate() async throws {
         let profile = try profile()
-        let engine = FakeEngine(bytesPerSecond: 100 << 20, fixedSeconds: 0.01)
+        let engine = FakeEngine(bytesPerSecond: Double(100 << 20), fixedSeconds: 0.01)
         let history = EstimateHistory(fileURL: nil)
         let estimator = Estimator(history: history, budget: 1)
         let options = ArchiveOptions(threads: 1)
