@@ -1,70 +1,14 @@
 import XCTest
 @testable import TampCore
 
-/// Runs against the real 7zz helper. Skipped when it isn't built, unless
-/// TAMP_REQUIRE_HELPERS=1 (as in CI), where a missing helper is a failure.
-final class ZipEngineTests: XCTestCase {
-    private var workspace: URL!
-    private var project: URL!
-    private var output: URL!
+final class ZipEngineTests: EngineTestCase {
     private var engine: ZipEngine!
-    private let fileManager = FileManager.default
+
+    override var requiredHelpers: [String] { ["7zz"] }
 
     override func setUpWithError() throws {
-        do {
-            _ = try HelperLocator.standard.url(for: "7zz")
-        } catch {
-            if ProcessInfo.processInfo.environment["TAMP_REQUIRE_HELPERS"] == "1" { throw error }
-            throw XCTSkip("7zz isn't built. Run scripts/build-helpers.sh and set TAMP_HELPERS_DIR.")
-        }
+        try super.setUpWithError()
         engine = ZipEngine()
-        workspace = fileManager.temporaryDirectory.appendingPathComponent("ZipEngineTests-\(UUID().uuidString)")
-        project = workspace.appendingPathComponent("Project")
-        output = workspace.appendingPathComponent("Output")
-        try fileManager.createDirectory(at: project.appendingPathComponent("data"), withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: project.appendingPathComponent("empty"), withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: output, withIntermediateDirectories: true)
-        try Data(String(repeating: "Tamp compresses text well. ", count: 2000).utf8)
-            .write(to: project.appendingPathComponent("readme.txt"))
-        try Self.randomData(count: 1 << 20).write(to: project.appendingPathComponent("data/random.bin"))
-        try Data("junk".utf8).write(to: project.appendingPathComponent(".DS_Store"))
-        try Data("junk".utf8).write(to: project.appendingPathComponent("._readme.txt"))
-    }
-
-    override func tearDownWithError() throws {
-        if let workspace { try? fileManager.removeItem(at: workspace) }
-    }
-
-    /// Incompressible bytes; `count` is rounded down to a multiple of 8.
-    private static func randomData(count: Int) -> Data {
-        var data = Data(count: count / 8 * 8)
-        data.withUnsafeMutableBytes { buffer in
-            var generator = SystemRandomNumberGenerator()
-            let words = buffer.bindMemory(to: UInt64.self)
-            for index in words.indices { words[index] = generator.next() }
-        }
-        return data
-    }
-
-    private func contents(of directory: URL) throws -> [String] {
-        try fileManager.contentsOfDirectory(atPath: directory.path).sorted()
-    }
-
-    private func assertMatchesProject(_ extracted: URL, file: StaticString = #filePath, line: UInt = #line) {
-        for relative in ["readme.txt", "data/random.bin"] {
-            XCTAssertTrue(
-                fileManager.contentsEqual(
-                    atPath: project.appendingPathComponent(relative).path,
-                    andPath: extracted.appendingPathComponent(relative).path
-                ),
-                "\(relative) differs after the round trip", file: file, line: line
-            )
-        }
-        var isDirectory: ObjCBool = false
-        XCTAssertTrue(fileManager.fileExists(atPath: extracted.appendingPathComponent("empty").path, isDirectory: &isDirectory) && isDirectory.boolValue,
-                      "empty folder is missing", file: file, line: line)
-        XCTAssertFalse(fileManager.fileExists(atPath: extracted.appendingPathComponent(".DS_Store").path), file: file, line: line)
-        XCTAssertFalse(fileManager.fileExists(atPath: extracted.appendingPathComponent("._readme.txt").path), file: file, line: line)
     }
 
     func testRoundTripIsByteForByteAtEveryStep() async throws {

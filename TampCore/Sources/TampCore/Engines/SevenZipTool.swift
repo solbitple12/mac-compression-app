@@ -32,15 +32,9 @@ struct SevenZipTool: Sendable {
         return value
     }
 
-    /// Extracts into a hidden staging folder beside the destination, then moves the
-    /// result into place: a single top-level item directly, several items inside a
-    /// folder named after the archive. Nothing is left behind on failure.
+    /// Extracts through a staging folder (see `SafeOutput.extract`), so nothing is left behind on failure.
     func extract(_ request: ExtractRequest, archiveBaseName: String, progress: @escaping ProgressHandler) async throws -> URL {
-        let fileManager = FileManager.default
-        let preferred = request.destinationDirectory.appendingPathComponent(archiveBaseName, isDirectory: true)
-        let staging = SafeOutput.temporaryURL(for: preferred)
-        try fileManager.createDirectory(at: staging, withIntermediateDirectories: false)
-        do {
+        try await SafeOutput.extract(into: request.destinationDirectory, baseName: archiveBaseName) { staging in
             // No -p switch: 7zz asks for the password only if the archive needs one,
             // and reads the answer from stdin.
             try await run(
@@ -48,21 +42,6 @@ struct SevenZipTool: Sendable {
                 password: request.password,
                 progress: progress
             )
-            try Task.checkCancellation()
-            let children = try fileManager.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
-            if children.count == 1, let only = children.first {
-                let target = try SafeOutput.commitToAvailableName(
-                    only,
-                    preferring: request.destinationDirectory.appendingPathComponent(only.lastPathComponent),
-                    fileExtension: only.pathExtension
-                )
-                try? fileManager.removeItem(at: staging)
-                return target
-            }
-            return try SafeOutput.commitToAvailableName(staging, preferring: preferred, fileExtension: "")
-        } catch {
-            try? fileManager.removeItem(at: staging)
-            throw error
         }
     }
 }

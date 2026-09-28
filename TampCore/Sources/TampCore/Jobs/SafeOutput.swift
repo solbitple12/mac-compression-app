@@ -48,6 +48,40 @@ public enum SafeOutput {
         throw POSIXError(.EEXIST)
     }
 
+    /// Runs `body` against a hidden staging folder in `directory`, then moves the
+    /// result into place: a single top-level item directly, several items inside a
+    /// folder named `baseName`. On any error the staging folder is deleted.
+    /// - Returns: The extracted file or folder.
+    public static func extract(
+        into directory: URL,
+        baseName: String,
+        fileManager: FileManager = .default,
+        body: (URL) async throws -> Void
+    ) async throws -> URL {
+        let preferred = directory.appendingPathComponent(baseName, isDirectory: true)
+        let staging = temporaryURL(for: preferred)
+        try fileManager.createDirectory(at: staging, withIntermediateDirectories: false)
+        do {
+            try await body(staging)
+            try Task.checkCancellation()
+            let children = try fileManager.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
+            if children.count == 1, let only = children.first {
+                let target = try commitToAvailableName(
+                    only,
+                    preferring: directory.appendingPathComponent(only.lastPathComponent),
+                    fileExtension: only.pathExtension,
+                    fileManager: fileManager
+                )
+                try? fileManager.removeItem(at: staging)
+                return target
+            }
+            return try commitToAvailableName(staging, preferring: preferred, fileExtension: "", fileManager: fileManager)
+        } catch {
+            try? fileManager.removeItem(at: staging)
+            throw error
+        }
+    }
+
     public static func temporaryURL(for destination: URL) -> URL {
         destination
             .deletingLastPathComponent()

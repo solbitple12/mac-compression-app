@@ -12,7 +12,7 @@ Work in progress. Phase 1 is being built in small steps.
 | --- | --- |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping |
-| `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner, safe temp-file output, error messages |
+| `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner and pipelines, safe temp-file output, error messages |
 | `scripts/build-helpers.sh` | Downloads, verifies and builds the bundled helper tools as universal binaries |
 | `.github/workflows/ci.yml` | Builds the helpers, then builds and tests `TampCore` on a macOS runner |
 
@@ -52,6 +52,8 @@ Memory figures in the slider hint are approximations until the Phase 2a benchmar
 | Component | Version | Used for | License |
 | --- | --- | --- | --- |
 | [7-Zip](https://github.com/ip7z/7zip) (`7zz`) | 26.03 | ZIP now; 7Z and RAR extraction in Phase 2a | GNU LGPL 2.1, some code BSD 3-clause, unRAR code under the unRAR license restriction |
+| [zstd](https://github.com/facebook/zstd) (`zstd`) | 1.5.7 | TAR.ZST compression and extraction | BSD 3-clause (dual-licensed with GPLv2; Tamp uses it under BSD) |
+| [libarchive](https://github.com/libarchive/libarchive) (`bsdtar`) | 3.8.9 | Writing and reading the tar stream | BSD 2-clause |
 
 7-Zip is built from the unmodified source release above, which also satisfies the
 LGPL's source-availability requirement. The unRAR restriction forbids using that code

@@ -91,7 +91,7 @@ public struct ProcessRunner: Sendable {
 }
 
 /// Sends the stop signals, whether cancellation arrives before or after launch.
-private final class ProcessStopper: @unchecked Sendable {
+final class ProcessStopper: @unchecked Sendable {
     private let lock = NSLock()
     private let process: Process
     private let gracePeriod: TimeInterval
@@ -136,7 +136,7 @@ private final class ProcessStopper: @unchecked Sendable {
 
 /// Splits stdout into lines and keeps the tail of stderr. Pipe handlers call it
 /// from background queues, hence the lock.
-private final class OutputCollector: @unchecked Sendable {
+final class OutputCollector: @unchecked Sendable {
     private static let errorLimit = 64 * 1024
     private static let lineBreaks: Set<UInt8> = [0x0A, 0x0D, 0x08]
 

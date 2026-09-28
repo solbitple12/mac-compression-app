@@ -104,7 +104,8 @@ extension TampError {
             return .permissionDenied(path: nil)
         }
         if mentions("data error", "crc failed", "headers error", "unexpected end", "data corruption",
-                    "truncated", "damaged", "can not open the file as archive", "premature end") {
+                    "truncated", "damaged", "can not open the file as archive", "premature end",
+                    "unknown frame descriptor", "unrecognized archive format") {
             return .corruptArchive
         }
         let firstLine = standardError
