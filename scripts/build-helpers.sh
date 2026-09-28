@@ -64,7 +64,7 @@ ZPAQ_VERSION=7.15
 ZPAQ_GIT=https://github.com/zpaq/zpaq
 ZPAQ_COMMIT=9ab539f644e364f0d92e2918b90ce2534c75653f
 # Bump when the zpaq patch changes, so cached builds are redone.
-ZPAQ_REVISION=2
+ZPAQ_REVISION=3
 
 MINIZIP_VERSION=4.2.2
 MINIZIP_GIT=https://github.com/zlib-ng/minizip-ng
@@ -357,6 +357,7 @@ build_zpaq() {
   local dir="$SRC/zpaq-$ZPAQ_VERSION"
   fetch_git "$ZPAQ_GIT" "$ZPAQ_VERSION" "$ZPAQ_COMMIT" "$dir"
   patch -d "$dir" -p1 --quiet <"$PATCHES/zpaq-no-parent-dirs.patch"
+  patch -d "$dir" -p1 --quiet <"$PATCHES/zpaq-key-from-stdin.patch"
   echo "Building zpaq $ZPAQ_VERSION"
   clang++ -arch arm64 -arch x86_64 -O3 -Dunix -DNOJIT -pthread -w \
     -o "$BIN/zpaq" "$dir/zpaq.cpp" "$dir/libzpaq.cpp"

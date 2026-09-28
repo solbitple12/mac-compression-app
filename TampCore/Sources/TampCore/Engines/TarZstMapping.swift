@@ -34,16 +34,25 @@ public struct TarZstMapping: SpeedStepMapping {
     public var capabilities: EngineCapabilities { [.multithreading] }
 
     public func parameters(for step: SpeedStep, options: ArchiveOptions) -> TarZstParameters {
-        let long = ZstdParameters.maxCompatibleWindowLog
         let threads = options.threads
-        return switch step {
-        case .store: .plainTar
-        case .fastest: .zstd(ZstdParameters(level: 1, longWindowLog: nil, threads: threads))
-        case .fast: .zstd(ZstdParameters(level: 3, longWindowLog: nil, threads: threads))
-        case .normal: .zstd(ZstdParameters(level: 9, longWindowLog: nil, threads: threads))
-        case .good: .zstd(ZstdParameters(level: 15, longWindowLog: long, threads: threads))
-        case .best: .zstd(ZstdParameters(level: 22, longWindowLog: long, threads: threads))
+        let (level, stepWindow): (Int, Int?) = switch step {
+        case .store: (0, nil)
+        case .fastest: (1, nil)
+        case .fast: (3, nil)
+        case .normal: (9, nil)
+        case .good: (15, ZstdParameters.maxCompatibleWindowLog)
+        case .best: (22, ZstdParameters.maxCompatibleWindowLog)
         }
+        guard step != .store else { return .plainTar }
+        return .zstd(ZstdParameters(level: level, longWindowLog: Self.longWindowLog(options.advanced.zstdLongWindowLog, step: stepWindow),
+                                    threads: threads))
+    }
+
+    /// The Advanced panel's window: 0 turns long matching off, and anything above
+    /// 128 MiB is capped, since neither stock zstd nor Tamp's own reader opens it without extra flags.
+    static func longWindowLog(_ chosen: Int?, step: Int?) -> Int? {
+        guard let chosen else { return step }
+        return chosen <= 0 ? nil : min(max(chosen, 10), ZstdParameters.maxCompatibleWindowLog)
     }
 
     public func hint(for step: SpeedStep, options: ArchiveOptions) -> StepHint {

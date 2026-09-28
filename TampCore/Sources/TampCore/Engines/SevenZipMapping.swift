@@ -6,16 +6,34 @@ public struct SevenZipParameters: Equatable, Sendable {
     /// 7-Zip's level (-mx). 0 stores.
     public var level: Int
     public var threads: Int
+    /// LZMA and LZMA2 only: nil keeps the level's.
+    public var dictionaryBytes: UInt64?
+    /// LZMA and LZMA2 only: nil keeps the level's.
+    public var wordSize: Int?
+    public var solid: SolidMode
+    public var executableFilter: Bool
 
-    public init(method: CompressionMethod = .lzma2, level: Int, threads: Int) {
+    public init(method: CompressionMethod = .lzma2, level: Int, threads: Int, dictionaryBytes: UInt64? = nil,
+                wordSize: Int? = nil, solid: SolidMode = .automatic, executableFilter: Bool = false) {
         self.method = method
         self.level = level
         self.threads = threads
+        self.dictionaryBytes = dictionaryBytes
+        self.wordSize = wordSize
+        self.solid = solid
+        self.executableFilter = executableFilter
     }
+
+    var usesLZMA: Bool { level > 0 && (method == .lzma2 || method == .lzma) }
 
     public var sevenZipArguments: [String] {
         let name = level == 0 ? "Copy" : method.sevenZipName ?? "LZMA2"
-        return ["-t7z", "-m0=\(name)", "-mx=\(level)", "-mmt=\(threads)"]
+        var arguments = ["-t7z", "-m0=\(name)", "-mx=\(level)", "-mmt=\(threads)"]
+        if usesLZMA, let dictionaryBytes { arguments.append("-md=\(max(1, dictionaryBytes / .mebibyte))m") }
+        if usesLZMA, let wordSize { arguments.append("-mfb=\(min(max(wordSize, 5), 273))") }
+        if let solid = solid.sevenZipSwitch { arguments.append(solid) }
+        if executableFilter, level > 0 { arguments.append("-mf=BCJ2") }
+        return arguments
     }
 }
 
@@ -27,10 +45,15 @@ public struct SevenZipMapping: SpeedStepMapping {
 
     public func parameters(for step: SpeedStep, options: ArchiveOptions) -> SevenZipParameters {
         let levels = [0, 1, 3, 5, 7, 9]
+        let advanced = options.advanced
         return SevenZipParameters(
             method: format.resolvedMethod(options.method) ?? .lzma2,
             level: levels[step.rawValue],
-            threads: options.threads
+            threads: options.threads,
+            dictionaryBytes: advanced.dictionaryMebibytes.map { UInt64(max(1, $0)) * .mebibyte },
+            wordSize: advanced.wordSize,
+            solid: advanced.solid,
+            executableFilter: advanced.executableFilter
         )
     }
 
@@ -64,14 +87,16 @@ public struct SevenZipMapping: SpeedStepMapping {
             // Levels 5 and up use the BT4 match finder, which takes two threads per
             // encoder; each encoder beyond the first also holds a block of 4 × dictionary.
             // 7-Zip lowers the thread count when that would pass the memory limit.
-            let dictionary = dictionarySize(level: parameters.level)
+            let dictionary = parameters.dictionaryBytes ?? dictionarySize(level: parameters.level)
             let encoders = parameters.level >= 5 ? max(1, threads / 2) : threads
-            let perEncoder = lzmaEncoderMemory(level: parameters.level) + (encoders > 1 ? 4 * dictionary : 0)
+            let perEncoder = lzmaEncoderMemory(level: parameters.level, dictionary: dictionary)
+                + (encoders > 1 ? 4 * dictionary : 0)
             let limit = ProcessInfo.processInfo.physicalMemory / 2
             let used = max(1, min(encoders, limit / max(1, perEncoder)))
             return buffers + used * perEncoder
         case .lzma:
-            return buffers + lzmaEncoderMemory(level: parameters.level)
+            let dictionary = parameters.dictionaryBytes ?? dictionarySize(level: parameters.level)
+            return buffers + lzmaEncoderMemory(level: parameters.level, dictionary: dictionary)
         case .ppmd:
             let mebibytes: UInt64 = switch parameters.level {
             case 9...: 192
@@ -101,8 +126,8 @@ public struct SevenZipMapping: SpeedStepMapping {
 
     /// One LZMA encoder: about 7.5 × dictionary with the HC4 match finder
     /// (levels 1 to 4), 11.5 × with BT4.
-    static func lzmaEncoderMemory(level: Int) -> UInt64 {
-        let dictionary = dictionarySize(level: level)
+    static func lzmaEncoderMemory(level: Int, dictionary: UInt64? = nil) -> UInt64 {
+        let dictionary = dictionary ?? dictionarySize(level: level)
         return (level >= 5 ? dictionary * 23 / 2 : dictionary * 15 / 2) + 4 * .mebibyte
     }
 }

@@ -11,11 +11,23 @@ public struct ZipParameters: Equatable, Sendable {
     /// 7-Zip's own level (-mx) for its methods, zstd's level for Zstandard. 0 stores.
     public var level: Int
     public var threads: Int
+    /// Used only with a password, and only by 7zz: minizip always uses AES-256.
+    public var encryption: ZipEncryption
+    /// 7-Zip's Deflate "fast bytes" (-mfb); nil keeps the level's.
+    public var fastBytes: Int?
 
-    public init(method: CompressionMethod = .deflate, level: Int, threads: Int) {
+    public init(method: CompressionMethod = .deflate, level: Int, threads: Int, encryption: ZipEncryption = .aes256,
+                fastBytes: Int? = nil) {
         self.method = method
         self.level = level
         self.threads = threads
+        self.encryption = encryption
+        self.fastBytes = fastBytes
+    }
+
+    /// 7zz's switches for a password sent on stdin.
+    var sevenZipPasswordArguments: [String] {
+        ["-mem=\(encryption == .aes256 ? "AES256" : "ZipCrypto")", "-p"]
     }
 
     public var writer: Writer {
@@ -25,7 +37,9 @@ public struct ZipParameters: Equatable, Sendable {
     /// Store uses the Copy method whatever method was chosen.
     public var sevenZipArguments: [String] {
         let name = level == 0 ? "Copy" : method.sevenZipName ?? "Deflate"
-        return ["-tzip", "-mm=\(name)", "-mx=\(level)", "-mmt=\(threads)"]
+        var arguments = ["-tzip", "-mm=\(name)", "-mx=\(level)", "-mmt=\(threads)"]
+        if level > 0, let fastBytes { arguments.append("-mfb=\(fastBytes)") }
+        return arguments
     }
 
     /// minizip reads "-19" as level 19.
@@ -42,10 +56,15 @@ public struct ZipMapping: SpeedStepMapping {
 
     public func parameters(for step: SpeedStep, options: ArchiveOptions) -> ZipParameters {
         let method = format.resolvedMethod(options.method) ?? .deflate
-        // 7-Zip's Deflate runs extra passes at 7 and 9. Zstandard skips its
-        // slowest levels, since minizip compresses each file on one thread.
-        let levels = method == .zstd ? [0, 1, 3, 9, 15, 19] : [0, 1, 3, 5, 7, 9]
-        return ZipParameters(method: method, level: levels[step.rawValue], threads: options.threads)
+        // 7-Zip's Deflate runs extra passes at 7 and 9. Its levels 1 to 4 write the
+        // same file, so Fast is level 5 with a short match length instead (measured:
+        // halfway between Fastest and Normal in both size and time). Zstandard skips
+        // its slowest levels, since minizip compresses each file on one thread.
+        let deflate = method == .deflate || method == .deflate64
+        let levels = method == .zstd ? [0, 1, 3, 9, 15, 19] : deflate ? [0, 1, 5, 5, 7, 9] : [0, 1, 3, 5, 7, 9]
+        return ZipParameters(method: method, level: levels[step.rawValue], threads: options.threads,
+                             encryption: options.advanced.zipEncryption,
+                             fastBytes: deflate && step == .fast ? 8 : nil)
     }
 
     public func hint(for step: SpeedStep, options: ArchiveOptions) -> StepHint {

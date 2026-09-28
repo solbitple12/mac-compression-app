@@ -39,7 +39,13 @@ final class ZipMappingTests: XCTestCase {
 
     func testLevelsPerStep() {
         let levels = SpeedStep.allCases.map { mapping.parameters(for: $0, options: ArchiveOptions(threads: 4)).level }
-        XCTAssertEqual(levels, [0, 1, 3, 5, 7, 9])
+        XCTAssertEqual(levels, [0, 1, 5, 5, 7, 9])
+        // 7-Zip's Deflate writes the same file at levels 1 to 4, so Fast shortens level 5's matches.
+        XCTAssertEqual(mapping.parameters(for: .fast, options: ArchiveOptions(threads: 4)).sevenZipArguments,
+                       ["-tzip", "-mm=Deflate", "-mx=5", "-mmt=4", "-mfb=8"])
+        let bzip2 = SpeedStep.allCases.map { mapping.parameters(for: $0, options: ArchiveOptions(threads: 4, method: .bzip2)).level }
+        XCTAssertEqual(bzip2, [0, 1, 3, 5, 7, 9])
+        XCTAssertNil(mapping.parameters(for: .fast, options: ArchiveOptions(threads: 4, method: .bzip2)).fastBytes)
     }
 
     func testSevenZipArguments() {
@@ -236,8 +242,9 @@ final class TarMappingTests: XCTestCase {
 
     func testMemoryGrowsWithTheStep() {
         // One thread: with more, xz's thread cut can make Best need less than Good.
+        // Brotli is left out: its middle qualities measured hungrier than Good.
         let options = ArchiveOptions(threads: 1)
-        for format in [ArchiveFormat.tarGz, .tarBz2, .tarXz, .tarZst, .tarLz, .tarBr] {
+        for format in [ArchiveFormat.tarGz, .tarBz2, .tarXz, .tarZst, .tarLz] {
             let memory = SpeedStep.allCases.dropFirst().map { TarMapping(format: format).hint(for: $0, options: options).peakMemoryBytes }
             XCTAssertEqual(memory, memory.sorted(), format.title)
         }
@@ -256,5 +263,106 @@ final class TarMappingTests: XCTestCase {
         XCTAssertTrue(TarMapping(format: .tarXz).capabilities.contains(.multithreading))
         XCTAssertFalse(TarMapping(format: .tarLz4).capabilities.contains(.multithreading))
         XCTAssertFalse(TarMapping(format: .tarBr).capabilities.contains(.multithreading))
+    }
+}
+
+final class AdvancedOptionsTests: XCTestCase {
+    private func options(_ change: (inout AdvancedOptions) -> Void) -> ArchiveOptions {
+        var advanced = AdvancedOptions()
+        change(&advanced)
+        return ArchiveOptions(threads: 4, advanced: advanced)
+    }
+
+    func testDefaultsChangeNothing() {
+        XCTAssertEqual(SevenZipMapping().parameters(for: .normal, options: ArchiveOptions(threads: 4)).sevenZipArguments,
+                       ["-t7z", "-m0=LZMA2", "-mx=5", "-mmt=4"])
+        XCTAssertEqual(ZpaqMapping().parameters(for: .good, options: ArchiveOptions(threads: 2)).arguments, ["-m4", "-threads", "2"])
+    }
+
+    func testSevenZipSwitches() {
+        let chosen = options {
+            $0.dictionaryMebibytes = 64
+            $0.wordSize = 500
+            $0.solid = .blockMebibytes(256)
+            $0.executableFilter = true
+        }
+        XCTAssertEqual(SevenZipMapping().parameters(for: .good, options: chosen).sevenZipArguments,
+                       ["-t7z", "-m0=LZMA2", "-mx=7", "-mmt=4", "-md=64m", "-mfb=273", "-ms=256m", "-mf=BCJ2"])
+        // Dictionary and word size are LZMA's, and Store has no filter.
+        var ppmd = chosen
+        ppmd.method = .ppmd
+        XCTAssertEqual(SevenZipMapping().parameters(for: .good, options: ppmd).sevenZipArguments,
+                       ["-t7z", "-m0=PPMd", "-mx=7", "-mmt=4", "-ms=256m", "-mf=BCJ2"])
+        XCTAssertEqual(SevenZipMapping().parameters(for: .store, options: options { $0.solid = .off; $0.executableFilter = true })
+            .sevenZipArguments, ["-t7z", "-m0=Copy", "-mx=0", "-mmt=4", "-ms=off"])
+    }
+
+    func testSevenZipDictionaryDrivesTheMemoryHint() {
+        let small = SevenZipMapping().hint(for: .best, options: options { $0.dictionaryMebibytes = 16 }).peakMemoryBytes
+        let standard = SevenZipMapping().hint(for: .best, options: ArchiveOptions(threads: 4)).peakMemoryBytes
+        XCTAssertLessThan(small, standard)
+    }
+
+    func testZipEncryptionChoice() {
+        XCTAssertEqual(ZipMapping().parameters(for: .normal, options: ArchiveOptions()).sevenZipPasswordArguments, ["-mem=AES256", "-p"])
+        XCTAssertEqual(ZipMapping().parameters(for: .normal, options: options { $0.zipEncryption = .zipCrypto }).sevenZipPasswordArguments,
+                       ["-mem=ZipCrypto", "-p"])
+    }
+
+    func testZstdWindowIsCappedAndCanBeTurnedOff() {
+        func window(_ chosen: Int?, _ step: SpeedStep) -> Int? {
+            guard case let .zstd(zstd) = TarZstMapping().parameters(for: step, options: options { $0.zstdLongWindowLog = chosen })
+            else { return -1 }
+            return zstd.longWindowLog
+        }
+        XCTAssertEqual(window(nil, .normal), nil)
+        XCTAssertEqual(window(nil, .best), 27)
+        XCTAssertEqual(window(0, .best), nil)
+        XCTAssertEqual(window(24, .fastest), 24)
+        XCTAssertEqual(window(31, .normal), 27)
+    }
+
+    func testXzBlockSizeAndBrotliWindow() {
+        let xz = TarMapping(format: .tarXz).parameters(for: .normal, options: options { $0.xzBlockMebibytes = 32 })
+        XCTAssertEqual(xz, .tool(name: "xz", arguments: ["-6", "-T4", "--block-size=32MiB", "--memlimit-compress=50%", "-q", "-Q", "-c"]))
+        let brotli = TarMapping(format: .tarBr).parameters(for: .best, options: options { $0.brotliLargeWindow = true })
+        XCTAssertEqual(brotli, .tool(name: "brotli", arguments: ["-q", "11", "--large_window=28", "-c"]))
+        let hint = TarMapping(format: .tarBr).hint(for: .best, options: options { $0.brotliLargeWindow = true })
+        XCTAssertTrue(hint.notes.contains { $0.contains("--large_window") })
+        XCTAssertGreaterThan(hint.peakMemoryBytes, TarMapping(format: .tarBr).hint(for: .best, options: ArchiveOptions()).peakMemoryBytes)
+    }
+
+    func testZpaqBlockSize() {
+        let parameters = ZpaqMapping().parameters(for: .best, options: options { $0.zpaqBlockLog = 8 })
+        XCTAssertEqual(parameters.arguments, ["-m58", "-threads", "4"])
+        XCTAssertEqual(parameters.blockBytes, 256 * .mebibyte)
+        XCTAssertEqual(ZpaqParameters(method: 1, threads: 1).blockBytes, 16 * .mebibyte)
+        XCTAssertEqual(ZpaqParameters(method: 3, threads: 1, blockLog: 20).arguments, ["-m311", "-threads", "1"])
+        XCTAssertGreaterThan(ZpaqMapping.memory(for: parameters),
+                             ZpaqMapping.memory(for: ZpaqMapping().parameters(for: .best, options: ArchiveOptions(threads: 4))))
+    }
+
+    func testPanelOffersOnlyWhatAppliesToTheFormatAndMethod() {
+        XCTAssertEqual(ArchiveFormat.sevenZip.advancedOptions(method: nil),
+                       [.dictionary, .wordSize, .solid, .executableFilter, .threads, .encryptFileNames])
+        XCTAssertFalse(ArchiveFormat.sevenZip.advancedOptions(method: .ppmd).contains(.dictionary))
+        XCTAssertEqual(ArchiveFormat.zip.advancedOptions(method: .zstd), [])
+        XCTAssertEqual(ArchiveFormat.tarLz4.advancedOptions(method: nil), [])
+        XCTAssertEqual(ArchiveFormat.tar.advancedOptions(method: nil), [])
+        for format in ArchiveFormat.allCases {
+            let offered = format.advancedOptions(method: nil)
+            XCTAssertEqual(offered.count, Set(offered).count, format.title)
+        }
+    }
+
+    func testSavedOptionsDecodeWithMissingFields() throws {
+        let decoded = try JSONDecoder().decode(AdvancedOptions.self, from: Data(#"{"wordSize": 64}"#.utf8))
+        var expected = AdvancedOptions()
+        expected.wordSize = 64
+        XCTAssertEqual(decoded, expected)
+        var full = AdvancedOptions()
+        full.solid = .blockMebibytes(64)
+        full.zipEncryption = .zipCrypto
+        XCTAssertEqual(try JSONDecoder().decode(AdvancedOptions.self, from: JSONEncoder().encode(full)), full)
     }
 }

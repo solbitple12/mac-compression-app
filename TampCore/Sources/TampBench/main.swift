@@ -32,12 +32,15 @@ struct ChildResult: Codable {
 enum Bench {
     static let registry = EngineRegistry.standard()
 
-    /// The largest resident size of any helper this process has waited for.
+    /// The largest resident size of any helper this process has waited for, or of
+    /// this process itself for engines that work in-process (Apple Archive).
     /// macOS reports ru_maxrss in bytes.
-    static func childrenPeakBytes() -> Int64 {
-        var usage = rusage()
-        getrusage(RUSAGE_CHILDREN, &usage)
-        return Int64(usage.ru_maxrss)
+    static func peakBytes() -> Int64 {
+        var children = rusage()
+        getrusage(RUSAGE_CHILDREN, &children)
+        var own = rusage()
+        getrusage(RUSAGE_SELF, &own)
+        return Int64(max(children.ru_maxrss, own.ru_maxrss))
     }
 
     static func fail(_ message: String) -> Never {
@@ -82,7 +85,7 @@ enum Bench {
         } catch {
             fail("\(arguments[1]) failed: \(TampError(error).localizedDescription)")
         }
-        let result = ChildResult(seconds: Date().timeIntervalSince(start), peakBytes: childrenPeakBytes(), output: output.path)
+        let result = ChildResult(seconds: Date().timeIntervalSince(start), peakBytes: peakBytes(), output: output.path)
         print(String(decoding: try! JSONEncoder().encode(result), as: UTF8.self))
     }
 
@@ -200,7 +203,8 @@ enum Bench {
             "",
             "\(ProcessInfo.processInfo.operatingSystemVersionString), \(cores) cores, "
                 + "\(ProcessInfo.processInfo.physicalMemory >> 30) GB RAM, input \(mb(inputBytes)) MB.",
-            "Peak is the largest single helper process; a pipeline such as bsdtar into xz adds a few MB for bsdtar.",
+            "Peak is the largest single process: a helper, or Tamp itself for Apple Archive (which includes about 10 MB of Tamp's own).",
+            "A pipeline such as bsdtar into xz adds a few MB for bsdtar.",
             "",
             "| Format | Method | Step | Threads | Ratio | Compress s | MB/s | Peak MB | Hint MB | Extract s | Extract peak MB |",
             "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",

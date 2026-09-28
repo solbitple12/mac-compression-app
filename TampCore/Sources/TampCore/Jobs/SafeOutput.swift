@@ -77,8 +77,29 @@ public enum SafeOutput {
             }
             return try commitToAvailableName(staging, preferring: preferred, fileExtension: "", fileManager: fileManager)
         } catch {
-            try? fileManager.removeItem(at: staging)
+            remove(staging, fileManager: fileManager)
             throw error
+        }
+    }
+
+    /// Deletes a file or folder, even one a failed extraction left with read-only
+    /// folders or locked files inside, which a plain delete can't remove.
+    public static func remove(_ url: URL, fileManager: FileManager = .default) {
+        guard (try? fileManager.removeItem(at: url)) == nil else { return }
+        makeRemovable(url, fileManager: fileManager)
+        try? fileManager.removeItem(at: url)
+    }
+
+    /// Clears locks, and gives the owner full access to each folder, top down so
+    /// that folders nobody could read can still be walked.
+    private static func makeRemovable(_ url: URL, fileManager: FileManager) {
+        _ = url.withUnsafeFileSystemRepresentation { path in path.map { lchflags($0, 0) } }
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              attributes[.type] as? FileAttributeType == .typeDirectory else { return }
+        let mode = attributes[.posixPermissions] as? Int ?? 0
+        try? fileManager.setAttributes([.posixPermissions: mode | 0o700], ofItemAtPath: url.path)
+        for name in (try? fileManager.contentsOfDirectory(atPath: url.path)) ?? [] {
+            makeRemovable(url.appendingPathComponent(name), fileManager: fileManager)
         }
     }
 
@@ -119,7 +140,7 @@ public enum SafeOutput {
     }
 
     public static func discard(_ temporary: URL, fileManager: FileManager = .default) {
-        try? fileManager.removeItem(at: temporary)
+        remove(temporary, fileManager: fileManager)
     }
 
     /// Deletes partial files a crash left behind. Called at launch for recent destinations.
@@ -128,9 +149,9 @@ public enum SafeOutput {
         let names = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
         var removed = 0
         for name in names where name.hasPrefix(partialPrefix) {
-            if (try? fileManager.removeItem(at: directory.appendingPathComponent(name))) != nil {
-                removed += 1
-            }
+            let url = directory.appendingPathComponent(name)
+            remove(url, fileManager: fileManager)
+            if !fileManager.fileExists(atPath: url.path) { removed += 1 }
         }
         return removed
     }

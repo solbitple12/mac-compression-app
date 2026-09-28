@@ -17,7 +17,8 @@ public struct EngineRegistry: Sendable {
         let archivers: [any ArchiveEngine] = [ZipEngine(helpers: helpers), SevenZipEngine(helpers: helpers)]
         let readOnly: [any ArchiveExtractor] = ReadOnlyFormat.allCases.map { ReadOnlyEngine(format: $0, helpers: helpers) }
         return EngineRegistry(
-            engines: archivers + tarFormats.map { TarEngine(format: $0, helpers: helpers) } + [ZpaqEngine(helpers: helpers)],
+            engines: archivers + tarFormats.map { TarEngine(format: $0, helpers: helpers) }
+                + [ZpaqEngine(helpers: helpers), AppleArchiveEngine(), DiskImageEngine()],
             extractors: readOnly + [CompressedFileEngine(helpers: helpers)]
         )
     }
@@ -50,6 +51,14 @@ public struct EngineRegistry: Sendable {
             return compressed ? extractors.first { $0 is CompressedFileEngine } : nil
         }
         guard named != nil || archive.pathExtension.isEmpty else { return nil }
+        // Both are checked by name first: a disk image's marker is at its end, and
+        // neither is worth looking for in every file without an extension.
+        if named == .appleArchive {
+            return AppleArchiveEngine.looksLikeAppleArchive(archive) ? engine(for: .appleArchive) : nil
+        }
+        if named == .dmg {
+            return DiskImageEngine.looksLikeDiskImage(archive) ? engine(for: .dmg) : nil
+        }
         switch ArchiveDetector.format(of: archive) {
         case .zip:
             return engine(for: .zip)
@@ -120,6 +129,8 @@ public enum ArchiveDetector {
         (".zip", .zip),
         (".7z", .sevenZip),
         (".zpaq", .zpaq),
+        (".aar", .appleArchive), (".yaa", .appleArchive),
+        (".dmg", .dmg),
     ]
 
     static let readOnlySuffixes: [(suffix: String, format: ReadOnlyFormat)] = [

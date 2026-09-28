@@ -60,10 +60,11 @@ final class ArchivePlannerTests: XCTestCase {
     }
 
     func testRegistryListsItsFormatsInPickerOrder() {
-        XCTAssertEqual(registry.availableFormats, [.zip, .sevenZip, .tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr, .zpaq])
+        XCTAssertEqual(registry.availableFormats, ArchiveFormat.allCases)
         XCTAssertEqual(registry.engine(for: .zip)?.format, .zip)
         XCTAssertEqual(registry.engine(for: .sevenZip)?.format, .sevenZip)
-        XCTAssertNil(registry.engine(for: .appleArchive))
+        XCTAssertEqual(registry.engine(for: .appleArchive)?.format, .appleArchive)
+        XCTAssertEqual(registry.engine(for: .dmg)?.format, .dmg)
     }
 
     func testTarFamilyArchivesOpenWithTheTarEngine() throws {

@@ -43,6 +43,7 @@ public struct TarEngine: ArchiveEngine {
     }
 
     public func compress(_ request: CompressRequest, progress: @escaping ProgressHandler) async throws -> URL {
+        try request.checkNamesAreUnique()
         let bsdtar = try helpers.url(for: Self.tarHelper)
         let compression = parameters(for: request.step, options: request.options)
         let compressor: URL

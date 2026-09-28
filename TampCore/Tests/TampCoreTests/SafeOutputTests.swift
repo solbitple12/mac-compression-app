@@ -66,6 +66,29 @@ final class SafeOutputTests: XCTestCase {
         XCTAssertEqual(try contents(), [])
     }
 
+    func testFailedExtractionRemovesReadOnlyAndLockedLeftovers() async throws {
+        struct Failure: Error {}
+        let fileManager = FileManager.default
+        do {
+            _ = try await SafeOutput.extract(into: directory, baseName: "Disc") { staging in
+                // What bsdtar leaves when it fails after restoring a read-only folder and a locked file.
+                let folder = staging.appendingPathComponent("System")
+                try fileManager.createDirectory(at: folder, withIntermediateDirectories: false)
+                let locked = folder.appendingPathComponent("locked.txt")
+                try Data("locked".utf8).write(to: locked)
+                try fileManager.setAttributes([.immutable: true], ofItemAtPath: locked.path)
+                let hidden = folder.appendingPathComponent("hidden")
+                try fileManager.createDirectory(at: hidden, withIntermediateDirectories: false)
+                try Data("x".utf8).write(to: hidden.appendingPathComponent("x.txt"))
+                try fileManager.setAttributes([.posixPermissions: 0], ofItemAtPath: hidden.path)
+                try fileManager.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+                throw Failure()
+            }
+            XCTFail("Expected the failure")
+        } catch is Failure {}
+        XCTAssertEqual(try contents(), [])
+    }
+
     func testCommitRefusesToReplace() throws {
         let source = directory.appendingPathComponent("a")
         let target = directory.appendingPathComponent("b")

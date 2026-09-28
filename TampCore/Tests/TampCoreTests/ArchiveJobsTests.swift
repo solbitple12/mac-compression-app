@@ -32,7 +32,14 @@ final class ArchiveJobsTests: EngineTestCase {
             let extracted = await queue.waitUntilDone(extractID)
             XCTAssertEqual(extracted?.state, .finished, format.title)
             XCTAssertEqual(extracted?.displayTitle, "Extracted “\(archive.lastPathComponent)”")
-            assertMatchesProject(try XCTUnwrap(extracted?.output))
+            let unpacked = try XCTUnwrap(extracted?.output)
+            if format == .dmg {
+                // hdiutil copies everything, .DS_Store files included.
+                XCTAssertTrue(fileManager.contentsEqual(atPath: project.appendingPathComponent("data/random.bin").path,
+                                                        andPath: unpacked.appendingPathComponent("data/random.bin").path))
+            } else {
+                assertMatchesProject(unpacked)
+            }
             try fileManager.removeItem(at: archive)
         }
     }

@@ -58,14 +58,54 @@ final class ZpaqEngineTests: EngineTestCase {
         XCTAssertTrue(fileManager.contentsEqual(atPath: dashed.path, andPath: extracted.appendingPathComponent("-dash.txt").path))
     }
 
-    func testAPasswordIsRefusedRatherThanIgnored() async throws {
+    func testAPasswordProtectsTheWholeArchive() async throws {
+        let archive = try await compress([project], name: "Secret.zpaq", password: "correct horse ü")
+        // Encrypted archives start with random salt, not the locator tag.
+        XCTAssertFalse(ZpaqEngine.hasSignature(archive))
+        let target = try makeFolder("SecretOut")
+        for (password, expected) in [(nil, TampError.passwordRequired), ("wrong", .wrongPassword)] as [(String?, TampError)] {
+            do {
+                _ = try await engine.extract(ExtractRequest(archive: archive, destinationDirectory: target, password: password),
+                                             progress: { _ in })
+                XCTFail("Expected \(expected)")
+            } catch {
+                XCTAssertEqual(error as? TampError, expected)
+            }
+        }
+        XCTAssertEqual(try contents(of: target), [])
+        let extracted = try await engine.extract(
+            ExtractRequest(archive: archive, destinationDirectory: target, password: "correct horse ü"),
+            progress: { _ in }
+        )
+        assertMatchesProject(extracted)
+        XCTAssertEqual(ZpaqEngine.keyArguments(nil).arguments, [])
+        XCTAssertEqual(ZpaqEngine.keyArguments("").arguments, [])
+        XCTAssertEqual(ZpaqEngine.keyArguments("pw").arguments, ["-key", "-"])
+    }
+
+    func testAnItemWhosePathExtendsAnothersKeepsItsOwnName() async throws {
+        // zpaq renames by the first matching prefix: "/w/Docs" also prefixes "/w/Docs Old/report.txt".
+        let docs = try makeFolder("Docs")
+        try Data("in docs".utf8).write(to: docs.appendingPathComponent("a.txt"))
+        let old = try makeFolder("Docs Old")
+        let report = old.appendingPathComponent("report.txt")
+        try Data("report".utf8).write(to: report)
+        let archive = try await compress([docs, report], name: "Prefix.zpaq")
+        let extracted = try await engine.extract(
+            ExtractRequest(archive: archive, destinationDirectory: try makeFolder("PrefixOut")),
+            progress: { _ in }
+        )
+        XCTAssertEqual(try contents(of: extracted), ["Docs", "report.txt"])
+    }
+
+    func testItemsWithTheSameNameAreRefused() async throws {
+        let twin = try makeFolder("Twin/readme.txt")
         do {
-            _ = try await compress([project], name: "Secret.zpaq", password: "no")
+            _ = try await compress([project.appendingPathComponent("readme.txt"), twin], name: "Twins.zpaq")
             XCTFail("Expected an error")
         } catch let TampError.other(message) {
-            XCTAssertTrue(message.contains("password"), message)
+            XCTAssertTrue(message.contains("readme.txt"), message)
         }
-        XCTAssertEqual(try contents(of: output), [])
     }
 
     func testAMissingItemFailsInsteadOfBeingSkipped() async throws {

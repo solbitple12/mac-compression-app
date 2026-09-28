@@ -1,7 +1,7 @@
 import Foundation
 
 /// 7Z through the bundled 7zz helper: solid LZMA2 by default. With a password,
-/// the file names are encrypted too.
+/// the file names are encrypted too unless the Advanced panel says otherwise.
 public struct SevenZipEngine: ArchiveEngine {
     private let mapping = SevenZipMapping()
     private let tool: SevenZipTool
@@ -22,6 +22,7 @@ public struct SevenZipEngine: ArchiveEngine {
     }
 
     public func compress(_ request: CompressRequest, progress: @escaping ProgressHandler) async throws -> URL {
+        try request.checkNamesAreUnique()
         var destination = request.destination
         // 7zz appends ".7z" to a name without it, which would break the final rename.
         if destination.pathExtension.lowercased() != format.fileExtension {
@@ -31,7 +32,9 @@ public struct SevenZipEngine: ArchiveEngine {
         var switches = parameters.sevenZipArguments + SevenZipTool.quietSwitches + ["-snl", "-y"]
         if request.excludesMacOSJunk { switches += SevenZipTool.junkExclusions }
         let password = request.password.flatMap { $0.isEmpty ? nil : $0 }
-        if password != nil { switches += ["-mhe=on", "-p"] }
+        if password != nil {
+            switches += request.options.advanced.encryptFileNames ? ["-mhe=on", "-p"] : ["-p"]
+        }
 
         return try await SafeOutput.write(to: destination, fileExtension: format.fileExtension) { temporary in
             try await tool.run(

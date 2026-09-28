@@ -30,6 +30,20 @@ public struct CompressRequest: Sendable {
     }
 }
 
+extension CompressRequest {
+    /// Every item is stored under its own name, so two with the same name (ignoring
+    /// case, as APFS does) would collide: one would be dropped or overwrite the other.
+    public func checkNamesAreUnique() throws {
+        var seen = Set<String>()
+        for item in items {
+            let name = item.lastPathComponent
+            guard seen.insert(name.precomposedStringWithCanonicalMapping.lowercased()).inserted else {
+                throw TampError.other("Two items are named “\(name)”. Rename one, or put them in a folder, and try again.")
+            }
+        }
+    }
+}
+
 public struct ExtractRequest: Sendable {
     public var archive: URL
     /// The folder the contents go into. A single top-level item lands directly in it;

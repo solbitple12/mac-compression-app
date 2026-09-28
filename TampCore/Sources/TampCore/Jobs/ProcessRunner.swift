@@ -74,6 +74,13 @@ public struct ProcessRunner: Sendable {
                 collector.appendError(data)
             }
         }
+        // Stops reading, and balances the group for each pipe that never reported its end.
+        let abandonPipes = {
+            output.fileHandleForReading.readabilityHandler = nil
+            errors.fileHandleForReading.readabilityHandler = nil
+            if collector.markEnded(.output) { drained.leave() }
+            if collector.markEnded(.error) { drained.leave() }
+        }
         let stopper = ProcessStopper(process: process, gracePeriod: terminationGracePeriod)
 
         let pipesDrained = try await withTaskCancellationHandler {
@@ -89,8 +96,7 @@ public struct ProcessRunner: Sendable {
                     try process.run()
                 } catch {
                     process.terminationHandler = nil
-                    output.fileHandleForReading.readabilityHandler = nil
-                    errors.fileHandleForReading.readabilityHandler = nil
+                    abandonPipes()
                     continuation.resume(throwing: TampError.helperMissing(name: executable.lastPathComponent))
                     return
                 }
@@ -104,10 +110,7 @@ public struct ProcessRunner: Sendable {
             stopper.stop()
         }
 
-        if !pipesDrained {
-            output.fileHandleForReading.readabilityHandler = nil
-            errors.fileHandleForReading.readabilityHandler = nil
-        }
+        if !pipesDrained { abandonPipes() }
         collector.flush()
 
         if stopper.wasStopped { throw CancellationError() }

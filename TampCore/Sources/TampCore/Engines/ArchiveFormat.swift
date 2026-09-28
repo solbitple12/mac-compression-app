@@ -104,6 +104,27 @@ public enum ArchiveFormat: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The Advanced panel's settings for this format with `method` inside, in
+    /// display order. Password-only settings are listed; the panel hides them
+    /// until a password is entered.
+    public func advancedOptions(method: CompressionMethod?) -> [AdvancedOption] {
+        let method = resolvedMethod(method)
+        switch self {
+        case .sevenZip:
+            let lzma = method == .lzma2 || method == .lzma
+            return (lzma ? [.dictionary, .wordSize] : []) + [.solid, .executableFilter, .threads, .encryptFileNames]
+        case .zip:
+            // minizip, which writes Zstandard, uses one thread and only AES-256.
+            return method == .zstd ? [] : [.threads, .zipEncryption]
+        case .tarZst: return [.zstdLongWindow, .threads]
+        case .tarXz: return [.xzBlockSize, .threads]
+        case .tarGz, .tarBz2: return [.threads]
+        case .tarBr: return [.brotliLargeWindow]
+        case .zpaq: return [.zpaqBlockSize, .threads]
+        default: return []
+        }
+    }
+
     /// `method` if this format can hold it, else the format's default.
     public func resolvedMethod(_ method: CompressionMethod?) -> CompressionMethod? {
         guard let method, methods.contains(method) else { return methods.first }

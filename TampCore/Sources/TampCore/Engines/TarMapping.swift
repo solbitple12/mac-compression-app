@@ -43,13 +43,16 @@ public struct TarMapping: SpeedStepMapping {
             // xz lowers the thread count when the job would need more than half the RAM.
             // -Q keeps that notice from turning the exit status into a warning.
             let preset = step == .best ? "-\(level)e" : "-\(level)"
-            return .tool(name: "xz", arguments: [preset, "-T\(threads)", "--memlimit-compress=50%", "-q", "-Q", "-c"])
+            let block = options.advanced.xzBlockMebibytes.map { ["--block-size=\(max(1, $0))MiB"] } ?? []
+            return .tool(name: "xz", arguments: [preset, "-T\(threads)"] + block + ["--memlimit-compress=50%", "-q", "-Q", "-c"])
         case .tarZst:
             guard case let .zstd(zstd) = TarZstMapping().parameters(for: step, options: options) else { return .plainTar }
             return .tool(name: "zstd", arguments: zstd.cliArguments + ["-q", "-c"])
         case .tarBr:
-            // Window 24 (16 MiB) is the largest that stock brotli decodes without --large_window.
-            return .tool(name: "brotli", arguments: ["-q", "\(level)", "-w", "24", "-c"])
+            // Window 24 (16 MiB) is the largest every brotli decoder opens. Tamp's brotli
+            // opens larger ones, but many other decoders need --large_window.
+            let window = options.advanced.brotliLargeWindow ? ["--large_window=\(Self.brotliLargeWindowLog)"] : ["-w", "24"]
+            return .tool(name: "brotli", arguments: ["-q", "\(level)"] + window + ["-c"])
         case .tarLz4:
             return .libarchiveFilter(name: "lz4", level: level)
         case .tarLz:
@@ -100,9 +103,9 @@ public struct TarMapping: SpeedStepMapping {
         return StepHint(
             step: step,
             summary: step.summary,
-            peakMemoryBytes: Self.tarMemory + compressorMemory(for: step, threads: options.threads),
+            peakMemoryBytes: Self.tarMemory + compressorMemory(for: step, options: options),
             outputExtension: format.fileExtension,
-            notes: notes(for: step)
+            notes: notes(for: step, options: options)
         )
     }
 
@@ -111,9 +114,9 @@ public struct TarMapping: SpeedStepMapping {
 
     /// Approximate peak memory of the compressor, from each tool's documented
     /// figures. The Phase 2a benchmark replaces these with measured peaks.
-    func compressorMemory(for step: SpeedStep, threads: Int) -> UInt64 {
+    func compressorMemory(for step: SpeedStep, options: ArchiveOptions) -> UInt64 {
         let level = levels[step.rawValue]
-        let threads = UInt64(max(1, threads))
+        let threads = UInt64(max(1, options.threads))
         switch format {
         case .tarGz:
             // Deflate keeps a 32 KB window; Zopfli's search tables are far larger.
@@ -122,17 +125,24 @@ public struct TarMapping: SpeedStepMapping {
             // bzip2 needs about 8 times its block, and pbzip2 queues a few blocks per thread.
             return 8 * .mebibyte + threads * UInt64(level) * .mebibyte
         case .tarXz:
-            let perThread = Self.xzMemoryPerThread(preset: level)
+            let perThread = Self.xzMemoryPerThread(preset: level,
+                                                   blockBytes: options.advanced.xzBlockMebibytes.map { UInt64(max(1, $0)) * .mebibyte })
             let limit = ProcessInfo.processInfo.physicalMemory / 2
             let used = max(1, min(threads, limit / max(1, perThread)))
             return used * perThread
         case .tarBr:
+            // Measured on macOS 15 with 22 MB of mixed data: brotli's quality 2 to 6
+            // hashers take far more there than on Linux.
             let mebibytes: UInt64 = switch level {
-            case ...4: 32
-            case 5...9: 96
-            default: 256
+            case ...1: 32
+            case 2...6: 480
+            case 7...9: 300
+            default: 400
             }
-            return mebibytes * .mebibyte
+            // The encoder keeps the whole window, plus hash tables of about the same
+            // size, once the input is that large.
+            let window: UInt64 = options.advanced.brotliLargeWindow ? 2 << UInt64(Self.brotliLargeWindowLog) : 0
+            return mebibytes * .mebibyte + window
         case .tarLz4:
             return 8 * .mebibyte
         case .tarLz:
@@ -150,20 +160,30 @@ public struct TarMapping: SpeedStepMapping {
 
     /// xz in threaded mode: each thread holds the encoder plus about three blocks of
     /// three times the dictionary (measured: -9 with 8 threads needs about 10 GB).
-    static func xzMemoryPerThread(preset: Int) -> UInt64 {
+    static func xzMemoryPerThread(preset: Int, blockBytes: UInt64? = nil) -> UInt64 {
         let dictionaryMebibytes: [UInt64] = [0, 1, 2, 4, 4, 8, 8, 16, 32, 64]
         let dictionary = preset == 0 ? 256 * 1024 : dictionaryMebibytes[min(max(preset, 0), 9)] * .mebibyte
-        return lzmaMemory(preset: preset) + 9 * dictionary
+        // xz's default block is 3 × dictionary; each thread holds about three.
+        return lzmaMemory(preset: preset) + 3 * (blockBytes ?? 3 * dictionary)
     }
 
-    func notes(for step: SpeedStep) -> [String] {
+    /// 256 MiB. Larger windows need gigabytes to compress.
+    static let brotliLargeWindowLog = 28
+
+    func notes(for step: SpeedStep, options: ArchiveOptions) -> [String] {
         switch format {
         case .tarGz where step == .best:
-            ["Best uses Zopfli: much slower than Good for a few percent smaller"]
+            return ["Best uses Zopfli: much slower than Good for a few percent smaller"]
+        case .tarBz2 where step >= .normal:
+            // bzip2's levels only change its block size (measured: Normal to Best within 1%).
+            return ["Steps above Fast barely change the size; they only use more memory"]
+        case .tarBr where options.advanced.brotliLargeWindow:
+            return ["Large window: many brotli decoders can't open this, and older brotli tools need --large_window",
+                    "7-Zip and Windows can't open this without extra software"]
         case .tarLz4, .tarLz, .tarBr:
-            ["7-Zip and Windows can't open this without extra software"]
+            return ["7-Zip and Windows can't open this without extra software"]
         default:
-            []
+            return []
         }
     }
 }

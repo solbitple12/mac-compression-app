@@ -1,7 +1,7 @@
 import Foundation
 
-/// ZIP through the bundled 7zz helper: Deflate by default, AES-256 when a password
-/// is set. Zstandard goes through minizip instead, since official 7-Zip can read it
+/// ZIP through the bundled 7zz helper: Deflate by default, AES-256 (or ZipCrypto,
+/// if chosen) when a password is set. Zstandard goes through minizip instead, since official 7-Zip can read it
 /// in a ZIP but not write it.
 public struct ZipEngine: ArchiveEngine {
     static let minizipHelper = "minizip"
@@ -29,6 +29,7 @@ public struct ZipEngine: ArchiveEngine {
     }
 
     public func compress(_ request: CompressRequest, progress: @escaping ProgressHandler) async throws -> URL {
+        try request.checkNamesAreUnique()
         var destination = request.destination
         // 7zz appends ".zip" to a name without it, which would break the final rename.
         if destination.pathExtension.lowercased() != format.fileExtension {
@@ -42,7 +43,7 @@ public struct ZipEngine: ArchiveEngine {
             case .sevenZip:
                 var switches = parameters.sevenZipArguments + SevenZipTool.quietSwitches + ["-snl", "-y"]
                 if request.excludesMacOSJunk { switches += SevenZipTool.junkExclusions }
-                if password != nil { switches += ["-mem=AES256", "-p"] }
+                if password != nil { switches += parameters.sevenZipPasswordArguments }
                 try await tool.run(
                     ["a"] + switches + ["--", temporary.path] + request.items.map(\.path),
                     password: password,
