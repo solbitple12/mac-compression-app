@@ -19,6 +19,8 @@ jobs:
     name: Build and test
     if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: macos-15
+    # A hung step mustn't burn Mac minutes until GitHub's six-hour limit.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
@@ -70,8 +72,10 @@ jobs:
 
   ui-smoke:
     name: UI smoke test
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci')
+    # Opt-in on pull requests; adding some other label doesn't run it again.
+    if: github.event_name == 'push' || (contains(github.event.pull_request.labels.*.name, 'full-ci') && (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Restore built helpers
@@ -141,8 +145,10 @@ jobs:
 
   release-dry-run:
     name: Release dry run
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci')
+    # Opt-in on pull requests; adding some other label doesn't run it again.
+    if: github.event_name == 'push' || (contains(github.event.pull_request.labels.*.name, 'full-ci') && (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Restore built helpers
