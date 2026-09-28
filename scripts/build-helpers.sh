@@ -626,7 +626,13 @@ build_flac() {
   local dir="$SRC/flac-$FLAC_VERSION"
   fetch_git "$FLAC_GIT" "$FLAC_VERSION" "$FLAC_COMMIT" "$dir"
   echo "Building flac $FLAC_VERSION"
+  # CMAKE_DISABLE_FIND_PACKAGE_Intl: its vendored getopt fallback links gettext
+  # (translated --help text) when found, and it found Homebrew's arm64-only
+  # libintl, breaking the x86_64 half of this universal build the same way
+  # Homebrew's jpeg/png broke libwebp's. Tamp's bundled flac needs no
+  # translations, so this skips it rather than chasing a matching x86_64 copy.
   cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DCMAKE_DISABLE_FIND_PACKAGE_Intl=ON \
     -DBUILD_SHARED_LIBS=OFF -DBUILD_CXXLIBS=OFF -DBUILD_PROGRAMS=ON -DBUILD_EXAMPLES=OFF \
     -DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DINSTALL_MANPAGES=OFF -DWITH_OGG=OFF >/dev/null
   # The CLI's actual target is "flacapp" (renamed to the "flac" binary via
