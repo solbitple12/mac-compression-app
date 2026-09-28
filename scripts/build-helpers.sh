@@ -658,10 +658,11 @@ build_wavpack() {
   fetch_git "$WAVPACK_GIT" "$WAVPACK_VERSION" "$WAVPACK_COMMIT" "$dir"
   echo "Building WavPack $WAVPACK_VERSION"
   cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-    -DBUILD_SHARED_LIBS=OFF -DWAVPACK_BUILD_PROGRAMS=ON -DWAVPACK_BUILD_DOCS=OFF \
-    -DWAVPACK_ENABLE_LEGACY_FORMAT=OFF -DWAVPACK_BUILD_WINAMP_PLUGIN=OFF \
-    -DWAVPACK_BUILD_COOLEDIT_PLUGIN=OFF -DWAVPACK_INSTALL_DOCS=OFF -DWAVPACK_INSTALL_CMAKE_MODULE=OFF >/dev/null
-  cmake --build "$dir/out" -j"$JOBS" --target wavpack wvunpack >/dev/null
+    -DBUILD_SHARED_LIBS=OFF -DWAVPACK_BUILD_PROGRAMS=ON -DWAVPACK_ENABLE_LEGACY=OFF \
+    -DWAVPACK_INSTALL_DOCS=OFF -DWAVPACK_INSTALL_CMAKE_MODULE=OFF -DWAVPACK_INSTALL_PKGCONFIG_MODULE=OFF >/dev/null
+  # The wavpack CLI's real target is "wavpackapp" (renamed to the "wavpack"
+  # binary via OUTPUT_NAME); plain "wavpack" is the library target's name instead.
+  cmake --build "$dir/out" -j"$JOBS" --target wavpackapp wvunpack >/dev/null
   local wavpack_binary wvunpack_binary
   wavpack_binary="$(find "$dir/out" -type f -name wavpack -perm +111 | head -1)"
   wvunpack_binary="$(find "$dir/out" -type f -name wvunpack -perm +111 | head -1)"
