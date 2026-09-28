@@ -52,30 +52,60 @@ this Mac only. To make a build others can download, see
 `scripts/release.sh --dry-run` runs its checks without a certificate.
 
 Drop files or folders on the window, pick a format and a speed step, and press
-Compress. Dropping only archives Tamp can open (ZIP, TAR.ZST, TAR) extracts them
-instead. Output goes next to the originals and never replaces an existing file.
+Compress. Dropping only archives Tamp can open extracts them instead: everything it
+writes, plus RAR, CAB, ISO and CPIO, and lone compressed files such as `dump.sql.gz`,
+which become the file they hold. A file counts as an archive only when its name and
+its first bytes agree, so a `.docx` (a ZIP inside) is compressed, not taken apart. Output goes next to the originals and never replaces an existing file.
 Tamp remembers the last format and step.
 
 ## Speed steps
 
 Every format shows the same slider: Store, Fastest, Fast, Normal, Good, Best.
 
-| Step | ZIP (7zz Deflate) | TAR.ZST |
-| --- | --- | --- |
-| Store | -mx0 | plain .tar |
-| Fastest | -mx1 | -1 |
-| Fast | -mx3 | -3 |
-| Normal | -mx5 | -9 |
-| Good | -mx7 | -15 --long=27 |
-| Best | -mx9 | --ultra -22 --long=27 |
+| Step | ZIP (Deflate) | 7Z (LZMA2) | TAR.GZ (pigz) | TAR.BZ2 (pbzip2) | TAR.XZ | TAR.ZST | TAR.LZ4 | TAR.LZ | TAR.BR | ZPAQ |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Store | -mx0 | -mx0 | plain .tar | plain .tar | plain .tar | plain .tar | plain .tar | plain .tar | plain .tar | -m0 |
+| Fastest | -mx1 | -mx1 | -1 | -1 | -0 | -1 | 1 | 0 | -q 1 | -m1 |
+| Fast | -mx3 | -mx3 | -3 | -3 | -2 | -3 | 3 | 3 | -q 4 | -m2 |
+| Normal | -mx5 | -mx5 | -6 | -6 | -6 | -9 | 6 | 6 | -q 6 | -m3 |
+| Good | -mx7 | -mx7 | -9 | -8 | -8 | -15 --long=27 | 8 | 8 | -q 9 | -m4 |
+| Best | -mx9 | -mx9 | -11 (Zopfli) | -9 | -9e | --ultra -22 --long=27 | 9 | 9 | -q 11 | -m5 |
 
-The zstd window is capped at 27 (128 MiB) so any stock zstd can decompress the output.
-Memory figures in the slider hint are approximations until the Phase 2a benchmark measures them.
+Plain TAR only bundles, so its slider stays on Store. TAR.LZ4 and TAR.LZ go through
+libarchive's own filters, whose levels stop at 9. The zstd window is capped at 27
+(128 MiB) so any stock zstd can decompress the output.
+
+ZIP and 7Z also offer other methods in the Method menu. ZIP has Deflate64, BZip2 and
+LZMA through 7zz, and Zstandard (levels 1, 3, 9, 15, 19) through minizip, since official
+7-Zip reads zstd in a ZIP but can't write it. 7Z has LZMA, PPMd, BZip2 and Deflate.
+Anything but Deflate in a ZIP needs 7-Zip or similar on the other end, and the hint says so.
+
+Memory figures in the slider hint are estimates. `tamp-bench` measures the real ones
+(see Benchmark below).
+
+## Benchmark
+
+`scripts/make-bench-set.sh` writes a seeded 22 MB set (prose, CSV, JSON logs, binary
+records and the test corpus). `tamp-bench` compresses and extracts it with every format,
+step and method, and at several thread counts, in a child process per run, and reports
+ratio, time, speed, the largest helper's peak memory next to the hint's estimate, and
+adjacent steps that come out nearly identical. The Benchmark workflow runs it on a
+GitHub macOS runner when the tool changes, or by hand.
+
+```sh
+scripts/make-bench-set.sh build/bench-set
+TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c release \
+  tamp-bench --input build/bench-set --markdown build/bench.md
+```
 
 ## Known issues
 
-- ZIP extraction fails on a symlink whose target starts with `../`, even when it
-  stays inside the archive: 7-Zip rejects such links as unsafe. TAR.ZST keeps them.
+- ZIP and 7Z extraction fail on a symlink whose target starts with `../`, even when it
+  stays inside the archive: 7-Zip rejects such links as unsafe. The TAR formats keep them.
+- ZPAQ doesn't store symbolic links, and can't take a password yet (zpaq only accepts
+  one as a command-line argument). ZIP with Zstandard can't take a password yet either.
+- Split archives (`.part2.rar`, `.7z.002`) are each offered for extraction on their own;
+  only the first part works.
 - If two copies of Tamp run at once, the one launched second can remove the other's
   unfinished output while cleaning up after crashes.
 
@@ -86,9 +116,21 @@ Memory figures in the slider hint are approximations until the Phase 2a benchmar
 
 | Component | Version | Used for | License |
 | --- | --- | --- | --- |
-| [7-Zip](https://github.com/ip7z/7zip) (`7zz`) | 26.03 | ZIP now; 7Z and RAR extraction in Phase 2a | GNU LGPL 2.1, some code BSD 3-clause, unRAR code under the unRAR license restriction |
-| [zstd](https://github.com/facebook/zstd) (`zstd`) | 1.5.7 | TAR.ZST compression and extraction | BSD 3-clause (dual-licensed with GPLv2; Tamp uses it under BSD) |
-| [libarchive](https://github.com/libarchive/libarchive) (`bsdtar`) | 3.8.9 | Writing and reading the tar stream | BSD 2-clause |
+| [7-Zip](https://github.com/ip7z/7zip) (`7zz`) | 26.03 | ZIP, 7Z; extracting RAR, and CAB and ISO that bsdtar can't read | GNU LGPL 2.1, some code BSD 3-clause, unRAR code under the unRAR license restriction |
+| [libarchive](https://github.com/libarchive/libarchive) (`bsdtar`, `bsdcat`) | 3.8.9 | Writing and reading tar streams, the lz4 and lzip filters, CAB, ISO and CPIO, lone compressed files | BSD 2-clause |
+| [zstd](https://github.com/facebook/zstd) (`zstd`, libzstd) | 1.5.7 | TAR.ZST; zstd in libarchive and minizip | BSD 3-clause (dual-licensed with GPLv2; Tamp uses it under BSD) |
+| [XZ Utils](https://tukaani.org/xz/) (`xz`, liblzma) | 5.8.4 | TAR.XZ; lzip and xz in libarchive | 0BSD |
+| [LZ4](https://github.com/lz4/lz4) (liblz4 only) | 1.10.0 | lz4 in libarchive | BSD 2-clause (the GPL command-line tool isn't used) |
+| [pigz](https://zlib.net/pigz/) with [Zopfli](https://github.com/google/zopfli) | 2.8 | TAR.GZ | zlib license; Zopfli Apache 2.0 |
+| [pbzip2](https://launchpad.net/pbzip2) | 1.1.13 | TAR.BZ2 | BSD-style (pbzip2 license); links macOS's libbz2 |
+| [Brotli](https://github.com/google/brotli) (`brotli`) | 1.2.0 | TAR.BR | MIT |
+| [zpaq](https://github.com/zpaq/zpaq) (`zpaq`) | 7.15 | ZPAQ | Public domain (Unlicense); its libdivsufsort part is MIT |
+| [minizip-ng](https://github.com/zlib-ng/minizip-ng) (`minizip`) | 4.2.2 | Writing Zstandard inside ZIP | zlib license |
+
+Tamp patches three of them, with the patches in `scripts/patches`: minizip-ng (store link
+targets the Info-ZIP way, skip Mac junk files, read the password from stdin, mark archives
+as made on Unix), zpaq (never extract outside the target folder) and pbzip2 (build fix
+from Homebrew). None of the components is GPL-only.
 
 7-Zip is built from the unmodified source release above, which also satisfies the
 LGPL's source-availability requirement. The unRAR restriction forbids using that code
