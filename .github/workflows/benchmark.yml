@@ -1,19 +1,18 @@
 name: Benchmark
 
 # Time, size and peak memory of every format at every speed step, and thread
-# scaling, on the seeded set from scripts/make-bench-set.sh. Runs when a push
-# changes the benchmark itself, or by hand.
+# scaling, on the seeded set from scripts/make-bench-set.sh. It takes about half
+# an hour of a Mac runner, so it runs by hand or when a pull request is labeled
+# "benchmark".
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - TampCore/Sources/TampBench/**
-      - scripts/make-bench-set.sh
-      - .github/workflows/benchmark.yml
+  pull_request:
+    types: [labeled]
 
 jobs:
   benchmark:
     name: Benchmark
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'benchmark'
     runs-on: macos-15
     timeout-minutes: 60
     steps:

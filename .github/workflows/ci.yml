@@ -1,13 +1,23 @@
 name: CI
 
+# Every push to a pull request runs one job: build and test TampCore, then build
+# and launch the app. The UI smoke test and the release dry run cost as much again,
+# so they run on main, or on a pull request labeled "full-ci".
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  # Labeling a pull request mustn't cancel the build of its latest push.
+  group: ci-${{ github.ref }}-${{ github.event.label.name || 'push' }}
+  cancel-in-progress: true
 
 jobs:
-  core-tests:
-    name: TampCore tests
+  build-and-test:
+    name: Build and test
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -25,19 +35,6 @@ jobs:
           TAMP_HELPERS_DIR: ${{ github.workspace }}/build/helpers/bin
           TAMP_REQUIRE_HELPERS: "1"
         run: swift test --package-path TampCore
-
-  app-build:
-    name: App build
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Restore built helpers
-        uses: actions/cache@v4
-        with:
-          path: build/helpers
-          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
-      - name: Build helpers
-        run: scripts/build-helpers.sh
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate the Xcode project
@@ -73,6 +70,7 @@ jobs:
 
   ui-smoke:
     name: UI smoke test
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +141,7 @@ jobs:
 
   release-dry-run:
     name: Release dry run
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
