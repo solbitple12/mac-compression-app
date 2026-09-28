@@ -61,6 +61,64 @@ class EngineTestCase: XCTestCase {
         return folder
     }
 
+    /// A fresh copy of the test corpus (see Corpus/README.md) plus what git can't
+    /// hold: an empty folder, an executable script and a symlink to it.
+    func makeCorpus(named name: String = "Corpus") throws -> URL {
+        let source = try XCTUnwrap(Bundle.module.url(forResource: "Corpus", withExtension: nil), "the corpus isn't in the test bundle")
+        let corpus = workspace.appendingPathComponent(name)
+        try fileManager.copyItem(at: source, to: corpus)
+        try fileManager.createDirectory(at: corpus.appendingPathComponent("documents/empty folder"), withIntermediateDirectories: false)
+        let tools = corpus.appendingPathComponent("tools")
+        try fileManager.createDirectory(at: tools, withIntermediateDirectories: false)
+        let script = tools.appendingPathComponent("run.sh")
+        try Data("#!/bin/sh\necho Tamp\n".utf8).write(to: script)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        try fileManager.createSymbolicLink(atPath: tools.appendingPathComponent("latest").path, withDestinationPath: "run.sh")
+        return corpus
+    }
+
+    /// Checks that two folders hold the same names, kinds, bytes, symlink targets
+    /// and executable bits. Other permission bits depend on the umask, so they're ignored.
+    func assertTreesEqual(_ original: URL, _ copy: URL, file: StaticString = #filePath, line: UInt = #line) throws {
+        let expected = try treeEntries(at: original)
+        let actual = try treeEntries(at: copy)
+        XCTAssertEqual(actual.keys.sorted(), expected.keys.sorted(), "different items", file: file, line: line)
+        for (key, entry) in expected {
+            guard let other = actual[key] else { continue }
+            XCTAssertEqual(other.kind, entry.kind, "\(key) changed kind", file: file, line: line)
+            XCTAssertEqual(other.executableBits, entry.executableBits, "\(key) changed its executable bits", file: file, line: line)
+            XCTAssertEqual(other.linkTarget, entry.linkTarget, "\(key) points elsewhere", file: file, line: line)
+            if entry.kind == .typeRegular {
+                XCTAssertTrue(fileManager.contentsEqual(atPath: entry.path, andPath: other.path), "\(key) differs", file: file, line: line)
+            }
+        }
+    }
+
+    struct TreeEntry {
+        var path: String
+        var kind: FileAttributeType
+        var executableBits: Int
+        var linkTarget: String?
+    }
+
+    /// Every item under `root` by relative path (Unicode-normalized, since file
+    /// systems and archivers may store either form), without following symlinks.
+    func treeEntries(at root: URL) throws -> [String: TreeEntry] {
+        var entries: [String: TreeEntry] = [:]
+        for relative in try fileManager.subpathsOfDirectory(atPath: root.path) {
+            let path = root.appendingPathComponent(relative).path
+            let attributes = try fileManager.attributesOfItem(atPath: path)
+            let kind = attributes[.type] as? FileAttributeType ?? .typeUnknown
+            entries[relative.precomposedStringWithCanonicalMapping] = TreeEntry(
+                path: path,
+                kind: kind,
+                executableBits: (attributes[.posixPermissions] as? Int ?? 0) & 0o111,
+                linkTarget: kind == .typeSymbolicLink ? try fileManager.destinationOfSymbolicLink(atPath: path) : nil
+            )
+        }
+        return entries
+    }
+
     func assertMatchesProject(_ extracted: URL, file: StaticString = #filePath, line: UInt = #line) {
         for relative in ["readme.txt", "data/random.bin"] {
             XCTAssertTrue(

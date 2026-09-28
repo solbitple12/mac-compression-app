@@ -13,6 +13,8 @@ Work in progress. Phase 1 is being built in small steps.
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping |
 | `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner and pipelines, safe temp-file output, error messages |
+| `TampCore/Tests/TampCoreTests/Corpus/` | Sample files for the byte-for-byte round-trip tests (text, binary, JPEG, PNG, WAV, MP4) |
+| `scripts/make-corpus.sh` | Regenerates the corpus; it's committed, so only needed when it changes |
 | `scripts/build-helpers.sh` | Downloads, verifies and builds the bundled helper tools as universal binaries |
 | `.github/workflows/ci.yml` | Builds the helpers, then builds and tests `TampCore` on a macOS runner |
 
@@ -43,6 +45,11 @@ Every format shows the same slider: Store, Fastest, Fast, Normal, Good, Best.
 
 The zstd window is capped at 27 (128 MiB) so any stock zstd can decompress the output.
 Memory figures in the slider hint are approximations until the Phase 2a benchmark measures them.
+
+## Known issues
+
+- ZIP extraction fails on a symlink whose target starts with `../`, even when it
+  stays inside the archive: 7-Zip rejects such links as unsafe. TAR.ZST keeps them.
 
 ## Bundled components and licenses
 
