@@ -30,6 +30,8 @@ public struct JobSnapshot: Equatable, Sendable, Identifiable {
     public var id: JobID
     public var title: String
     public var state: JobState
+    /// The archive or extracted item a finished job produced, for "Show in Finder".
+    public var output: URL?
 }
 
 /// Handed to a running job so it can report progress without touching the queue's internals.
@@ -44,6 +46,11 @@ public final class JobContext: Sendable {
 
     public func reportProgress(bytesProcessed: Int64) async {
         await queue.recordProgress(id, bytesProcessed: bytesProcessed)
+    }
+
+    /// Records what the job produced; published with the job's next state change.
+    public func reportOutput(_ url: URL) async {
+        await queue.recordOutput(id, url: url)
     }
 }
 
@@ -119,6 +126,13 @@ public actor JobQueue {
         for id in order { cancel(id) }
     }
 
+    /// Forgets jobs that have finished, failed or been cancelled.
+    public func removeFinishedJobs() {
+        let finished = order.filter { entries[$0]?.snapshot.state.isFinal == true }
+        for id in finished { entries[id] = nil }
+        order.removeAll { entries[$0] == nil }
+    }
+
     public func snapshot(of id: JobID) -> JobSnapshot? {
         entries[id]?.snapshot
     }
@@ -155,6 +169,11 @@ public actor JobQueue {
         entry.snapshot.state = .running(progress)
         entries[id] = entry
         publish(id)
+    }
+
+    func recordOutput(_ id: JobID, url: URL) {
+        guard entries[id]?.snapshot.state.isFinal == false else { return }
+        entries[id]?.snapshot.output = url
     }
 
     private func removeObserver(_ token: UUID) {

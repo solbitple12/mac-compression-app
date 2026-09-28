@@ -86,6 +86,36 @@ final class JobQueueTests: XCTestCase {
         }
         XCTAssertEqual(states, [.queued, .running(nil), .finished])
     }
+
+    func testFinishedJobsCarryTheirOutput() async {
+        let queue = JobQueue()
+        let output = URL(fileURLWithPath: "/tmp/Photos.zip")
+        let id = await queue.enqueue(title: "Photos", totalBytes: 0) { context in
+            await context.reportOutput(output)
+        }
+        let done = await queue.waitUntilDone(id)
+        XCTAssertEqual(done?.state, .finished)
+        XCTAssertEqual(done?.output, output)
+    }
+
+    func testRemovingFinishedJobsKeepsTheOthers() async {
+        let queue = JobQueue(maxConcurrentJobs: 1)
+        let (started, signal) = AsyncStream<Void>.makeStream()
+        let quick = await queue.enqueue(title: "Quick", totalBytes: 0) { _ in }
+        _ = await queue.waitUntilDone(quick)
+        let slow = await queue.enqueue(title: "Slow", totalBytes: 0) { _ in
+            signal.yield()
+            try await Task.sleep(for: .seconds(30))
+        }
+        for await _ in started { break }
+        await queue.removeFinishedJobs()
+        let remaining = await queue.snapshots.map(\.id)
+        XCTAssertEqual(remaining, [slow])
+        let forgotten = await queue.snapshot(of: quick)
+        XCTAssertNil(forgotten)
+        await queue.cancel(slow)
+        _ = await queue.waitUntilDone(slow)
+    }
 }
 
 final class TestClock: @unchecked Sendable {

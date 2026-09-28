@@ -10,13 +10,18 @@ Work in progress. Phase 1 is being built in small steps.
 
 | Path | What it holds |
 | --- | --- |
+| `App/Tamp/` | The SwiftUI app: main window, drop zone, format picker, speed slider, job list |
+| `project.yml` | XcodeGen spec for the app; `xcodegen generate` writes `Tamp.xcodeproj` |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping |
+| `TampCore/Sources/TampCore/Archiving/` | Engine registry, archive detection by first bytes, what a drop does, output names |
+| `TampCore/Sources/TampCore/Settings/` | Last format and speed step, recent output folders |
 | `TampCore/Sources/TampCore/Jobs/` | Job queue, smoothed ETA, helper process runner and pipelines, safe temp-file output, error messages |
 | `TampCore/Tests/TampCoreTests/Corpus/` | Sample files for the byte-for-byte round-trip tests (text, binary, JPEG, PNG, WAV, MP4) |
 | `scripts/make-corpus.sh` | Regenerates the corpus; it's committed, so only needed when it changes |
 | `scripts/build-helpers.sh` | Downloads, verifies and builds the bundled helper tools as universal binaries |
-| `.github/workflows/ci.yml` | Builds the helpers, then builds and tests `TampCore` on a macOS runner |
+| `scripts/bundle-helpers.sh` | Xcode build phase that copies and signs the helpers into the app |
+| `.github/workflows/ci.yml` | Builds the helpers, tests `TampCore`, then builds, checks and launches the app on a macOS runner |
 
 ## Build and test
 
@@ -29,6 +34,23 @@ TAMP_HELPERS_DIR="$PWD/build/helpers/bin" swift test --package-path TampCore
 
 The engine tests run the real helpers and are skipped when `TAMP_HELPERS_DIR` doesn't
 point at them. CI sets `TAMP_REQUIRE_HELPERS=1`, which turns that skip into a failure.
+
+To build and run the app:
+
+```sh
+brew install xcodegen
+scripts/build-helpers.sh
+xcodegen generate
+open Tamp.xcodeproj
+```
+
+The build copies the helpers into `Tamp.app/Contents/Helpers` and signs the app for
+this Mac only. Developer ID signing and notarization come next.
+
+Drop files or folders on the window, pick a format and a speed step, and press
+Compress. Dropping only archives Tamp can open (ZIP, TAR.ZST, TAR) extracts them
+instead. Output goes next to the originals and never replaces an existing file.
+Tamp remembers the last format and step.
 
 ## Speed steps
 
@@ -54,7 +76,7 @@ Memory figures in the slider hint are approximations until the Phase 2a benchmar
 ## Bundled components and licenses
 
 `scripts/build-helpers.sh` copies each component's license text into
-`build/helpers/licenses`. The app bundles those files next to the helpers.
+`build/helpers/licenses`. The app bundles those files in `Contents/Resources/Licenses`.
 
 | Component | Version | Used for | License |
 | --- | --- | --- | --- |

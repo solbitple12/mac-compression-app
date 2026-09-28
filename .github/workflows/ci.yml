@@ -25,3 +25,44 @@ jobs:
           TAMP_HELPERS_DIR: ${{ github.workspace }}/build/helpers/bin
           TAMP_REQUIRE_HELPERS: "1"
         run: swift test --package-path TampCore
+
+  app-build:
+    name: App build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore built helpers
+        uses: actions/cache@v4
+        with:
+          path: build/helpers
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh') }}
+      - name: Build helpers
+        run: scripts/build-helpers.sh
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Build Tamp
+        run: >
+          xcodebuild -project Tamp.xcodeproj -scheme Tamp -configuration Debug
+          -destination 'platform=macOS' -derivedDataPath build/DerivedData build
+      - name: Check the bundle
+        run: |
+          app=build/DerivedData/Build/Products/Debug/Tamp.app
+          for tool in 7zz bsdtar zstd; do
+            test -x "$app/Contents/Helpers/$tool"
+            codesign --verify --strict "$app/Contents/Helpers/$tool"
+          done
+          ls "$app/Contents/Resources/Licenses"
+          codesign --verify --deep --strict --verbose=2 "$app"
+      - name: Launch Tamp
+        run: |
+          app=build/DerivedData/Build/Products/Debug/Tamp.app
+          "$app/Contents/MacOS/Tamp" &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            status=0; wait "$pid" || status=$?
+            echo "Tamp exited during launch with status $status"; exit 1
+          fi
+          kill "$pid"
