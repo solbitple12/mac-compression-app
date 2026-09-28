@@ -470,16 +470,26 @@ build_mozjpeg() {
   fi
   local dir="$SRC/mozjpeg-$MOZJPEG_VERSION"
   fetch_git "$MOZJPEG_GIT" "v$MOZJPEG_VERSION" "$MOZJPEG_COMMIT" "$dir"
-  echo "Building mozjpeg $MOZJPEG_VERSION"
-  # mozjpeg's own cmake_minimum_required predates CMake 3.5, which current CMake
-  # refuses to honor at all; this just accepts the old policies rather than the
-  # (removed) old behavior itself, which is fine for a plain C build like this one.
-  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-    -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_JPEG8=1 -DPNG_SUPPORTED=OFF -DWITH_TURBOJPEG=OFF >/dev/null
-  cmake --build "$dir/out" -j"$JOBS" --target cjpeg djpeg jpegtran >/dev/null
-  cp "$dir/out/cjpeg" "$BIN/cjpeg"
-  cp "$dir/out/djpeg" "$BIN/djpeg"
-  cp "$dir/out/jpegtran" "$BIN/jpegtran"
+  # Its SIMD is hand-written assembly, which CMake (rightly) refuses to build for
+  # two architectures in one pass; one configure and build per architecture, lipo'd
+  # together after, same as 7zz, xz and liblz4 above.
+  local cjpeg_slices=() djpeg_slices=() jpegtran_slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building mozjpeg $MOZJPEG_VERSION for $arch"
+    # mozjpeg's own cmake_minimum_required predates CMake 3.5, which current CMake
+    # refuses to honor at all; this just accepts the old policies rather than the
+    # (removed) old behavior itself, which is fine for a plain C build like this one.
+    cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_JPEG8=1 -DPNG_SUPPORTED=OFF -DWITH_TURBOJPEG=OFF >/dev/null
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target cjpeg djpeg jpegtran >/dev/null
+    cjpeg_slices+=("$dir/out-$arch/cjpeg")
+    djpeg_slices+=("$dir/out-$arch/djpeg")
+    jpegtran_slices+=("$dir/out-$arch/jpegtran")
+  done
+  lipo -create -output "$BIN/cjpeg" "${cjpeg_slices[@]}"
+  lipo -create -output "$BIN/djpeg" "${djpeg_slices[@]}"
+  lipo -create -output "$BIN/jpegtran" "${jpegtran_slices[@]}"
   cp "$dir/LICENSE.md" "$LICENSES/mozjpeg.txt"
   stamp cjpeg "$MOZJPEG_VERSION"
   stamp djpeg "$MOZJPEG_VERSION"
