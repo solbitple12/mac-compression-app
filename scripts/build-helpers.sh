@@ -119,9 +119,11 @@ HIGHWAY_COMMIT=2607d3b5b0113992fe84d3848859eae13b3b52c1
 
 # libjxl's color-management fallback (JPEGXL_ENABLE_SKCMS): a git submodule with no
 # "use the system copy" option, compiled directly from source, not a library with
-# its own releases or tags.
+# its own releases or tags. The real source lives on the "mirror" branch; "main"
+# is nearly empty (just README/LICENSE) and doesn't have skcms.h at all.
 SKCMS_GIT=https://github.com/google/skcms
-SKCMS_COMMIT=c1248c99cbd8cdc3ed8e8314c997600724e10c70
+SKCMS_BRANCH=mirror
+SKCMS_COMMIT=96d9171c94b937a1b5f0293de7309ac16311b722
 
 FLAC_VERSION=1.5.0
 FLAC_GIT=https://github.com/xiph/flac
@@ -808,7 +810,7 @@ build_libjxl() {
   fi
   local dir="$SRC/libjxl-$LIBJXL_VERSION"
   fetch_git "$LIBJXL_GIT" "v$LIBJXL_VERSION" "$LIBJXL_COMMIT" "$dir"
-  fetch_git "$SKCMS_GIT" main "$SKCMS_COMMIT" "$dir/third_party/skcms"
+  fetch_git "$SKCMS_GIT" "$SKCMS_BRANCH" "$SKCMS_COMMIT" "$dir/third_party/skcms"
   echo "Building libjxl $LIBJXL_VERSION"
   cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_PREFIX_PATH="$DEPS" \
     -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_TOOLS=ON -DJPEGXL_FORCE_SYSTEM_HWY=ON -DJPEGXL_FORCE_SYSTEM_BROTLI=ON \
