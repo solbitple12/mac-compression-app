@@ -919,6 +919,7 @@ build_libopusenc() {
   [[ -f "$stamp" ]] && { echo "libopusenc $LIBOPUSENC_VERSION is already built"; return; }
   local dir="$SRC/libopusenc-$LIBOPUSENC_VERSION"
   fetch_git "$LIBOPUSENC_GIT" "v$LIBOPUSENC_VERSION" "$LIBOPUSENC_COMMIT" "$dir"
+  command -v autoreconf >/dev/null || brew install autoconf automake libtool >/dev/null
   echo "Bootstrapping libopusenc $LIBOPUSENC_VERSION"
   (cd "$dir" && PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" ./autogen.sh >/dev/null)
   local libs=()
