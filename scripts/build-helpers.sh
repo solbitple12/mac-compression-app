@@ -716,6 +716,10 @@ build_lame() {
 # UNIVERSAL_CMAKE's single pass.
 build_svtav1() {
   built SvtAv1EncApp "$SVTAV1_VERSION" && return
+  # Its x86_64 SIMD is real assembly, needing nasm to assemble; the arm64 pass
+  # doesn't need it (NEON goes through the compiler instead), which is why this
+  # wasn't caught until the second half of the per-architecture loop below.
+  command -v nasm >/dev/null || brew install nasm >/dev/null
   local dir="$SRC/SVT-AV1-$SVTAV1_VERSION"
   fetch_git "$SVTAV1_GIT" "v$SVTAV1_VERSION" "$SVTAV1_COMMIT" "$dir"
   local app_slices=()
