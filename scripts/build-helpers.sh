@@ -661,6 +661,25 @@ build_svtav1() {
   local relative="${static_library#"$dir/install-arm64/lib/"}"
   lipo -create -output "$DEPS/lib/$relative" "$dir/install-arm64/lib/$relative" "$dir/install-x86_64/lib/$relative"
   cp "$dir/LICENSE.md" "$LICENSES/SVT-AV1.txt"
+  # SVT-AV1 installs its own CMake package as "SVT-AV1Config.cmake" (and a
+  # pkg-config file named "SvtAv1Enc.pc"), but libavif's own check_avif_option
+  # looks for a bare "SvtAv1Enc" target and calls find_package(svt) (lowercase) if
+  # it isn't already defined, which won't find either of those under their real
+  # names. Writing this small package config directly, rather than trying to
+  # reconcile the naming through SVT-AV1's own generated one, keeps it working
+  # regardless of exactly what that one exports.
+  mkdir -p "$DEPS/lib/cmake/svt"
+  cat >"$DEPS/lib/cmake/svt/svt-config.cmake" <<'EOF'
+if(NOT TARGET SvtAv1Enc)
+  add_library(SvtAv1Enc STATIC IMPORTED)
+  set_target_properties(SvtAv1Enc PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../../libSvtAv1Enc.a"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include"
+  )
+endif()
+set(svt_FOUND TRUE)
+EOF
+  cp "$DEPS/lib/cmake/svt/svt-config.cmake" "$DEPS/lib/cmake/svt/svtConfig.cmake"
   stamp SvtAv1EncApp "$SVTAV1_VERSION"
 }
 
@@ -716,6 +735,35 @@ build_libjxl() {
   stamp djxl "$LIBJXL_VERSION"
 }
 
+# avifenc, for AVIF, over the SVT-AV1 encoder built above. AVIF_ZLIBPNG=LOCAL and
+# AVIF_JPEG=LOCAL let libavif's own CMake fetch and build zlib, libpng and
+# libjpeg-turbo itself (avifenc's own source-image readers, unrelated to the AVIF
+# codec) rather than this script doing it separately. Per-architecture like
+# mozjpeg and libwebp: that locally-built libjpeg-turbo has the identical
+# multi-arch assembly restriction mozjpeg does, being the same codebase.
+build_libavif() {
+  built avifenc "$LIBAVIF_VERSION" && return
+  local dir="$SRC/libavif-$LIBAVIF_VERSION"
+  fetch_git "$LIBAVIF_GIT" "v$LIBAVIF_VERSION" "$LIBAVIF_COMMIT" "$dir"
+  local slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building libavif $LIBAVIF_VERSION for $arch"
+    cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DCMAKE_PREFIX_PATH="$DEPS" -DBUILD_SHARED_LIBS=OFF -DAVIF_BUILD_APPS=ON -DAVIF_BUILD_TESTS=OFF \
+      -DAVIF_ZLIBPNG=LOCAL -DAVIF_JPEG=LOCAL -DAVIF_LIBYUV=OFF -DAVIF_LIBSHARPYUV=OFF -DAVIF_LIBXML2=OFF \
+      -DAVIF_CODEC_SVT=SYSTEM -DAVIF_CODEC_AOM=OFF -DAVIF_CODEC_DAV1D=OFF -DAVIF_CODEC_LIBGAV1=OFF -DAVIF_CODEC_RAV1E=OFF >/dev/null
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target avifenc >/dev/null
+    local avifenc_binary
+    avifenc_binary="$(find "$dir/out-$arch" -type f -name avifenc -perm +111 | head -1)"
+    [[ -n "$avifenc_binary" ]] || { echo "libavif built for $arch but avifenc wasn't found under $dir/out-$arch" >&2; exit 1; }
+    slices+=("$avifenc_binary")
+  done
+  lipo -create -output "$BIN/avifenc" "${slices[@]}"
+  cp "$dir/LICENSE" "$LICENSES/libavif.txt"
+  stamp avifenc "$LIBAVIF_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -734,3 +782,4 @@ build_lame
 build_svtav1
 build_highway
 build_libjxl
+build_libavif

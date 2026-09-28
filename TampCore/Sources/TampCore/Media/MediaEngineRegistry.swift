@@ -17,7 +17,7 @@ public struct MediaEngineRegistry: Sendable {
         MediaEngineRegistry(
             imageEngines: [
                 OxipngEngine(helpers: helpers), MozjpegEngine(helpers: helpers), WebPEngine(helpers: helpers), HEICEngine(),
-                JxlEngine(helpers: helpers),
+                JxlEngine(helpers: helpers), AvifEngine(helpers: helpers),
             ],
             audioEngines: [
                 FlacEngine(helpers: helpers), WavPackEngine(helpers: helpers), AACEngine(), ALACEngine(), LameEngine(helpers: helpers),
