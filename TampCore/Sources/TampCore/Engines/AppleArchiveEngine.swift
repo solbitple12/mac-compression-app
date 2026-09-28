@@ -179,27 +179,36 @@ public struct AppleArchiveEngine: ArchiveEngine {
                 return .ok
             }
         }
-        // writeDirectoryContents fails on a path that isn't a folder, so each file or link
-        // given on its own is cloned into a scratch folder on its own volume and archived from there.
-        var scratchFolders: [URL] = []
-        defer { for folder in scratchFolders { try? FileManager.default.removeItem(at: folder) } }
+        // writeDirectoryContents only archives folders, so files and links given on their
+        // own are cloned into one scratch folder on their volume and archived from there,
+        // with the scratch folder itself left out.
+        var scratch: URL?
+        defer { if let scratch { try? FileManager.default.removeItem(at: scratch) } }
+        let skipRoot: ArchiveHeader.EntryFilter = { message, path, data in
+            if message == .searchExclude, path.string.isEmpty || path.string == "." { return .skip }
+            return filter(message, path, data)
+        }
         do {
             for item in items {
-                var parent = item.deletingLastPathComponent()
                 let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 if values?.isDirectory != true || values?.isSymbolicLink == true {
-                    let scratch = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
+                    if scratch == nil {
+                        scratch = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
                                                               appropriateFor: item, create: true)
-                    scratchFolders.append(scratch)
-                    try cloneItem(item, into: scratch)
-                    parent = scratch
+                    }
+                    try cloneItem(item, into: scratch!)
+                    continue
                 }
-                // Stored as the item's name, then its contents below that.
+                // Stored as the folder's name, then its contents below that.
                 try opened.writeDirectoryContents(
-                    archiveFrom: FilePath(parent.path),
+                    archiveFrom: FilePath(item.deletingLastPathComponent().path),
                     path: FilePath(item.lastPathComponent),
                     keySet: keySet, selectUsing: filter, threadCount: parameters.threads
                 )
+            }
+            if let scratch {
+                try opened.writeDirectoryContents(archiveFrom: FilePath(scratch.path), keySet: keySet,
+                                                  selectUsing: skipRoot, threadCount: parameters.threads)
             }
             encoder = nil
             try opened.close()
