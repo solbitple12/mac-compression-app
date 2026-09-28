@@ -37,13 +37,25 @@ public struct ZipEngine: ArchiveEngine {
         }
         let parameters = parameters(for: request.step, options: request.options)
         let password = request.password.flatMap { $0.isEmpty ? nil : $0 }
+        var switches = parameters.sevenZipArguments + SevenZipTool.quietSwitches + ["-snl", "-y"]
+        if request.excludesMacOSJunk { switches += SevenZipTool.junkExclusions }
+        if password != nil { switches += parameters.sevenZipPasswordArguments }
 
+        if let volumeBytes = request.volumeBytes {
+            guard parameters.writer == .sevenZip else {
+                throw TampError.other("ZIP with Zstandard can't be split into parts. Choose another method, or 7Z.")
+            }
+            return try await SafeOutput.writeVolumes(to: destination, fileExtension: format.fileExtension) { folder, name in
+                try await tool.run(
+                    ["a"] + switches + ["-v\(volumeBytes)b", "--", folder.appendingPathComponent(name).path] + request.items.map(\.path),
+                    password: password,
+                    progress: progress
+                )
+            }
+        }
         return try await SafeOutput.write(to: destination, fileExtension: format.fileExtension) { temporary in
             switch parameters.writer {
             case .sevenZip:
-                var switches = parameters.sevenZipArguments + SevenZipTool.quietSwitches + ["-snl", "-y"]
-                if request.excludesMacOSJunk { switches += SevenZipTool.junkExclusions }
-                if password != nil { switches += parameters.sevenZipPasswordArguments }
                 try await tool.run(
                     ["a"] + switches + ["--", temporary.path] + request.items.map(\.path),
                     password: password,
@@ -56,11 +68,7 @@ public struct ZipEngine: ArchiveEngine {
     }
 
     public func extract(_ request: ExtractRequest, progress: @escaping ProgressHandler) async throws -> URL {
-        try await tool.extract(
-            request,
-            archiveBaseName: request.archive.deletingPathExtension().lastPathComponent,
-            progress: progress
-        )
+        try await tool.extract(request, archiveBaseName: ArchiveDetector.baseName(of: request.archive), progress: progress)
     }
 
     /// minizip stores paths relative to its working directory, so it runs once per

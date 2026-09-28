@@ -170,6 +170,39 @@ final class ArchivePlannerTests: XCTestCase {
         XCTAssertEqual(ArchivePlanner.action(for: [], registry: registry), .compress([]))
     }
 
+    func testSplitArchivePartsAreRecognized() {
+        let seven = ArchiveDetector.splitPart(of: URL(fileURLWithPath: "/a/Photos.7z.002"))
+        XCTAssertEqual(seven?.number, 2)
+        XCTAssertEqual(seven?.firstPart.path, "/a/Photos.7z.001")
+        XCTAssertEqual(seven?.format, .sevenZip)
+        XCTAssertEqual(seven?.baseName, "Photos")
+        XCTAssertEqual(ArchiveDetector.splitPart(of: URL(fileURLWithPath: "/a/Big File.ZIP.0010"))?.firstPart.path, "/a/Big File.ZIP.0001")
+        let rar = ArchiveDetector.splitPart(of: URL(fileURLWithPath: "/a/Film.part03.rar"))
+        XCTAssertEqual(rar?.number, 3)
+        XCTAssertEqual(rar?.firstPart.path, "/a/Film.part01.rar")
+        XCTAssertNil(rar?.format)
+        XCTAssertEqual(ArchiveDetector.baseName(of: URL(fileURLWithPath: "/a/Film.part1.rar")), "Film")
+        XCTAssertEqual(ArchiveDetector.baseName(of: URL(fileURLWithPath: "/a/Photos.zip")), "Photos")
+        for name in ["notes.001", "Photos.7z", "a.7z.abc", "x.part.rar", "report.pdf.002"] {
+            XCTAssertNil(ArchiveDetector.splitPart(of: URL(fileURLWithPath: "/a/\(name)")), name)
+        }
+    }
+
+    func testDroppingAnyPartOpensTheFirstOnce() throws {
+        let first = try file("Photos.7z.001", bytes: ArchiveDetector.sevenZipSignature)
+        let second = try file("Photos.7z.002", bytes: [1, 2, 3])
+        XCTAssertEqual(registry.extractor(for: first)?.writableFormat, .sevenZip)
+        XCTAssertNil(registry.extractor(for: second))
+        XCTAssertEqual(ArchivePlanner.action(for: [second], registry: registry), .extract([first]))
+        XCTAssertEqual(ArchivePlanner.action(for: [first, second], registry: registry), .extract([first]))
+        // A lone later part, without the first, is just a file.
+        let orphan = try file("Old.zip.003", bytes: [0x50, 0x4B, 0x03, 0x04])
+        XCTAssertEqual(ArchivePlanner.action(for: [orphan], registry: registry), .compress([orphan]))
+        // A first part whose bytes aren't the format its name claims isn't opened.
+        let fake = try file("Fake.zip.001", bytes: ArchiveDetector.sevenZipSignature)
+        XCTAssertNil(registry.extractor(for: fake))
+    }
+
     func testDestinationSitsBesideTheFirstItem() {
         let photos = URL(fileURLWithPath: "/Users/me/Pictures/Photos", isDirectory: true)
         let report = URL(fileURLWithPath: "/Users/me/Documents/report.pdf")

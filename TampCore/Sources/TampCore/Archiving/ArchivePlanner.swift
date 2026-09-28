@@ -11,12 +11,19 @@ public enum DropAction: Equatable, Sendable {
 public enum ArchivePlanner {
     /// Archives Tamp can open (see `EngineRegistry.extractor`) are extracted. Anything else,
     /// or a mix of archives and other items, is compressed together.
+    /// Parts of a split archive count as its first part, once, when that exists.
     public static func action(for items: [URL], registry: EngineRegistry) -> DropAction {
-        let allOpenable = !items.isEmpty && items.allSatisfy { item in
+        var seen = Set<URL>()
+        let opened = items.compactMap { item -> URL? in
+            let first = ArchiveDetector.splitPart(of: item)?.firstPart ?? item
+            let target = FileManager.default.fileExists(atPath: first.path) ? first : item
+            return seen.insert(target.standardizedFileURL).inserted ? target : nil
+        }
+        let allOpenable = !opened.isEmpty && opened.allSatisfy { item in
             let isFile = (try? item.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
             return isFile && registry.extractor(for: item) != nil
         }
-        return allOpenable ? .extract(items) : .compress(items)
+        return allOpenable ? .extract(opened) : .compress(items)
     }
 
     /// Where a new archive goes: beside the first item, named after it when it's

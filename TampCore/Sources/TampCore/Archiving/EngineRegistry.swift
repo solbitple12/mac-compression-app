@@ -40,6 +40,15 @@ public struct EngineRegistry: Sendable {
     /// decompressed into "dump.sql". A file with no extension is judged by its
     /// first bytes alone, and only a ZIP, 7Z, ZPAQ or plain tar counts then.
     public func extractor(for archive: URL) -> (any ArchiveExtractor)? {
+        // 7-Zip opens a split archive from its first part and reads the rest itself.
+        if let part = ArchiveDetector.splitPart(of: archive), part.format != nil {
+            guard part.number == 1 else { return nil }
+            switch ArchiveDetector.format(of: archive) {
+            case .sevenZip where part.format == .sevenZip: return engine(for: .sevenZip)
+            case .zip where part.format == .zip: return engine(for: .zip)
+            default: return nil
+            }
+        }
         if let readOnly = ArchiveDetector.readOnlyFormat(ofName: archive) {
             return ArchiveDetector.readOnlyFormat(of: archive) == readOnly ? readOnlyExtractor(for: readOnly) : nil
         }
@@ -148,6 +157,51 @@ public enum ArchiveDetector {
     /// Discs mark their first volume descriptor at 32769: "CD001" for ISO 9660, "BEA01" for UDF.
     static let discMarkerOffset = 32769
     static let discMarkers = [Array("CD001".utf8), Array("BEA01".utf8)]
+
+    /// One part of a split archive: "Photos.7z.001" (as 7-Zip splits 7Z and ZIP) or
+    /// "Photos.part2.rar". `format` is nil for RAR, which Tamp only opens.
+    public struct SplitPart: Equatable, Sendable {
+        public var number: Int
+        public var firstPart: URL
+        public var format: ArchiveFormat?
+        /// The name without the part, such as "Photos".
+        public var baseName: String
+    }
+
+    public static func splitPart(of url: URL) -> SplitPart? {
+        let name = url.lastPathComponent
+        let directory = url.deletingLastPathComponent()
+        let lowered = name.lowercased()
+        // "Name.7z.001", "Name.zip.012"
+        if let dot = name.lastIndex(of: "."), name[name.index(after: dot)...].count >= 3,
+           let number = Int(name[name.index(after: dot)...]), number > 0 {
+            let joined = String(name[..<dot])
+            let digits = name.distance(from: name.index(after: dot), to: name.endIndex)
+            for (suffix, format) in [(".7z", ArchiveFormat.sevenZip), (".zip", .zip)]
+            where joined.lowercased().hasSuffix(suffix) && joined.count > suffix.count {
+                let first = joined + "." + String(repeating: "0", count: digits - 1) + "1"
+                return SplitPart(number: number, firstPart: directory.appendingPathComponent(first),
+                                 format: format, baseName: String(joined.dropLast(suffix.count)))
+            }
+        }
+        // "Name.part2.rar", "Name.part02.rar"
+        if lowered.hasSuffix(".rar"), let range = lowered.range(of: ".part", options: .backwards) {
+            let digitsText = lowered[range.upperBound..<lowered.index(lowered.endIndex, offsetBy: -4)]
+            if !digitsText.isEmpty, digitsText.allSatisfy(\.isNumber), let number = Int(digitsText) {
+                let prefixLength = lowered.distance(from: lowered.startIndex, to: range.lowerBound)
+                let base = String(name.prefix(prefixLength))
+                let first = base + ".part" + String(repeating: "0", count: digitsText.count - 1) + "1" + String(name.suffix(4))
+                return SplitPart(number: number, firstPart: directory.appendingPathComponent(first), format: nil, baseName: base)
+            }
+        }
+        return nil
+    }
+
+    /// What an archive extracts as when it holds several items: "Photos" for
+    /// "Photos.zip", "Photos.7z.001" and "Photos.part1.rar".
+    public static func baseName(of url: URL) -> String {
+        splitPart(of: url)?.baseName ?? url.deletingPathExtension().lastPathComponent
+    }
 
     /// The read-only format a file name claims, such as `.iso` for "Disk.ISO".
     public static func readOnlyFormat(ofName url: URL) -> ReadOnlyFormat? {

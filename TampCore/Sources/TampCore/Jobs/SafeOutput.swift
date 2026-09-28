@@ -27,6 +27,67 @@ public enum SafeOutput {
         }
     }
 
+    /// Like `write`, for output split into parts: `body` writes "Name.7z.001",
+    /// "Name.7z.002" and so on into a hidden folder beside `destination`, then every
+    /// part moves out under the first base name none of whose parts is taken.
+    /// - Returns: The first part.
+    public static func writeVolumes(
+        to destination: URL,
+        fileExtension: String,
+        fileManager: FileManager = .default,
+        body: (_ folder: URL, _ name: String) async throws -> Void
+    ) async throws -> URL {
+        let folder = temporaryURL(for: destination)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: false)
+        defer { remove(folder, fileManager: fileManager) }
+        try await body(folder, destination.lastPathComponent)
+        try Task.checkCancellation()
+        let prefix = destination.lastPathComponent + "."
+        let parts = try fileManager.contentsOfDirectory(atPath: folder.path)
+            .filter { $0.hasPrefix(prefix) && Int($0.dropFirst(prefix.count)) != nil }
+            .sorted()
+        guard !parts.isEmpty else { throw TampError.fileNotFound(path: destination.path) }
+        let suffixes = parts.map { String($0.dropFirst(destination.lastPathComponent.count)) }
+        let directory = destination.deletingLastPathComponent()
+
+        for _ in 0..<100 {
+            let target = availableVolumeName(for: destination, fileExtension: fileExtension, suffixes: suffixes, fileManager: fileManager)
+            var moved: [(from: URL, to: URL)] = []
+            do {
+                for (part, suffix) in zip(parts, suffixes) {
+                    let from = folder.appendingPathComponent(part)
+                    let to = directory.appendingPathComponent(target.lastPathComponent + suffix)
+                    try commit(from, to: to)
+                    moved.append((from, to))
+                }
+                return directory.appendingPathComponent(target.lastPathComponent + suffixes[0])
+            } catch let error as POSIXError where error.code == .EEXIST {
+                // A part's name was taken meanwhile: put the moved ones back and try the next name.
+                for (from, to) in moved.reversed() { try? commit(to, to: from) }
+                continue
+            }
+        }
+        throw POSIXError(.EEXIST)
+    }
+
+    /// The first of "Name.7z", "Name 2.7z", ... none of whose parts exists yet.
+    static func availableVolumeName(for destination: URL, fileExtension: String, suffixes: [String],
+                                    fileManager: FileManager) -> URL {
+        let directory = destination.deletingLastPathComponent()
+        let name = destination.lastPathComponent
+        let suffix = ".\(fileExtension)"
+        let base = name.hasSuffix(suffix) && name.count > suffix.count ? String(name.dropLast(suffix.count)) : name
+        let ending = name.hasSuffix(suffix) && name.count > suffix.count ? suffix : ""
+        var number = 1
+        while true {
+            let candidate = directory.appendingPathComponent(number == 1 ? name : "\(base) \(number)\(ending)")
+            let taken = fileManager.fileExists(atPath: candidate.path)
+                || suffixes.contains { fileManager.fileExists(atPath: candidate.path + $0) }
+            if !taken { return candidate }
+            number += 1
+        }
+    }
+
     /// Moves a finished file or folder to the first free name based on `destination`.
     /// - Returns: Where it ended up.
     public static func commitToAvailableName(

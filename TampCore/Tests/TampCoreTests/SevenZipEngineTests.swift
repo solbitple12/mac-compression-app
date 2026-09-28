@@ -118,4 +118,58 @@ final class SevenZipEngineTests: EngineTestCase {
         XCTAssertEqual(ArchiveDetector.format(of: archive), .sevenZip)
         XCTAssertEqual(EngineRegistry.standard().extractor(for: archive)?.writableFormat, .sevenZip)
     }
+
+    func testSplitArchivesRoundTripFromTheFirstPart() async throws {
+        let registry = EngineRegistry.standard()
+        for (format, engine) in [(ArchiveFormat.sevenZip, SevenZipEngine() as any ArchiveEngine), (.zip, ZipEngine())] {
+            // The project holds 1 MB of random bytes, so 300 KB parts make at least four.
+            let first = try await engine.compress(
+                CompressRequest(items: [project], destination: output.appendingPathComponent("Split.\(format.fileExtension)"),
+                                step: .fast, options: ArchiveOptions(threads: 2), volumeBytes: 300 * 1024),
+                progress: { _ in }
+            )
+            XCTAssertEqual(first.lastPathComponent, "Split.\(format.fileExtension).001")
+            let parts = try contents(of: output).filter { $0.hasPrefix("Split.\(format.fileExtension).") }
+            XCTAssertGreaterThanOrEqual(parts.count, 4, format.title)
+            let extractor = try XCTUnwrap(registry.extractor(for: first), format.title)
+            let extracted = try await extractor.extract(
+                ExtractRequest(archive: first, destinationDirectory: try makeFolder("Split-\(format.title)")),
+                progress: { _ in }
+            )
+            XCTAssertEqual(extracted.lastPathComponent, "Project")
+            assertMatchesProject(extracted)
+        }
+        do {
+            _ = try await ZipEngine().compress(
+                CompressRequest(items: [project], destination: output.appendingPathComponent("Zstd.zip"), step: .fast,
+                                options: ArchiveOptions(method: .zstd), volumeBytes: 300 * 1024),
+                progress: { _ in }
+            )
+            XCTFail("Expected an error")
+        } catch let TampError.other(message) {
+            XCTAssertTrue(message.contains("Zstandard"), message)
+        }
+    }
+
+    func testAdvancedSwitchesProduceAWorkingArchive() async throws {
+        var advanced = AdvancedOptions()
+        advanced.dictionaryMebibytes = 1
+        advanced.wordSize = 64
+        advanced.solid = .off
+        advanced.executableFilter = true
+        advanced.encryptFileNames = false
+        let archive = try await engine.compress(
+            CompressRequest(items: [project], destination: output.appendingPathComponent("Advanced.7z"), step: .normal,
+                            options: ArchiveOptions(threads: 2, advanced: advanced), password: "pw"),
+            progress: { _ in }
+        )
+        // Names stay readable without the password when they aren't encrypted.
+        let listing = try await ProcessRunner().run(try HelperLocator.standard.url(for: "7zz"), arguments: ["l", archive.path])
+        XCTAssertTrue(listing.succeeded, listing.standardError)
+        let extracted = try await engine.extract(
+            ExtractRequest(archive: archive, destinationDirectory: try makeFolder("AdvancedOut"), password: "pw"),
+            progress: { _ in }
+        )
+        assertMatchesProject(extracted)
+    }
 }

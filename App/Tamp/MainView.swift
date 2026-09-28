@@ -7,9 +7,12 @@ struct MainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             DropZone(model: model)
-            ArchiveSettingsView(model: model)
-                .disabled(isExtracting)
-                .opacity(isExtracting ? 0.5 : 1)
+            Group {
+                ArchiveSettingsView(model: model)
+                AdvancedPanel(model: model)
+            }
+            .disabled(isExtracting)
+            .opacity(isExtracting ? 0.5 : 1)
             HStack {
                 Text(destinationText)
                     .font(.callout)
@@ -18,12 +21,24 @@ struct MainView: View {
                 Button(startTitle) { model.start() }
                     .keyboardShortcut(.defaultAction)
                     .controlSize(.large)
-                    .disabled(model.pendingAction == nil)
+                    .disabled(!model.canStart)
             }
             Divider()
             JobListView(model: model)
         }
         .padding(20)
+        .confirmationDialog(
+            "Move the originals to the Trash after compressing?",
+            isPresented: Binding(get: { model.isConfirmingTrash }, set: { model.isConfirmingTrash = $0 })
+        ) {
+            Button("Compress, Then Move to Trash", role: .destructive) { model.start(trashConfirmed: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They go to the Trash only if the archive is written\(model.choice.verifies ? " and checks out" : ""). You can put them back from there.")
+        }
+        .sheet(item: Binding(get: { model.passwordRequest }, set: { if $0 == nil { model.answerPasswordRequest(nil) } })) { request in
+            PasswordPrompt(request: request) { model.answerPasswordRequest($0) }
+        }
     }
 
     private var isExtracting: Bool {

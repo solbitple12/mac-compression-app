@@ -36,7 +36,7 @@ public struct ReadOnlyEngine: ArchiveExtractor {
     public var writableFormat: ArchiveFormat? { nil }
 
     public func extract(_ request: ExtractRequest, progress: @escaping ProgressHandler) async throws -> URL {
-        let baseName = request.archive.deletingPathExtension().lastPathComponent
+        let baseName = ArchiveDetector.baseName(of: request.archive)
         guard format != .rar else {
             return try await tool.extract(request, archiveBaseName: baseName, progress: progress)
         }

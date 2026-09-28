@@ -125,6 +125,16 @@ public enum ArchiveFormat: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// Whether the archive can be split into parts. Only 7zz writes parts, so ZIP
+    /// with Zstandard, which minizip writes, can't.
+    public func canSplit(method: CompressionMethod?) -> Bool {
+        switch self {
+        case .sevenZip: true
+        case .zip: resolvedMethod(method) != .zstd
+        default: false
+        }
+    }
+
     /// `method` if this format can hold it, else the format's default.
     public func resolvedMethod(_ method: CompressionMethod?) -> CompressionMethod? {
         guard let method, methods.contains(method) else { return methods.first }

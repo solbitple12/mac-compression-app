@@ -75,6 +75,42 @@ final class AppModel {
         settings.archiveChoice = choice
     }
 
+    // MARK: Advanced settings
+
+    /// Never saved, and cleared once a job starts with it.
+    var password = ""
+    var passwordConfirmation = ""
+
+    /// The Advanced panel's format-specific settings for the current format and method.
+    var advancedOptions: [AdvancedOption] {
+        choice.format.advancedOptions(method: method)
+    }
+
+    var takesPassword: Bool {
+        registry.engine(for: choice.format)?.capabilities.contains(.encryption) == true
+    }
+
+    var canSplit: Bool {
+        choice.format.canSplit(method: method)
+    }
+
+    /// hdiutil copies everything into a disk image, so the junk setting doesn't apply there.
+    var canExcludeJunk: Bool {
+        choice.format != .dmg
+    }
+
+    /// Why the password can't be used yet, or nil.
+    var passwordProblem: String? {
+        guard takesPassword, !password.isEmpty || !passwordConfirmation.isEmpty else { return nil }
+        return password == passwordConfirmation ? nil : "The passwords don't match"
+    }
+
+    /// Changes and saves the choice, for the Advanced panel's controls.
+    func update(_ change: (inout ArchiveChoice) -> Void) {
+        change(&choice)
+        settings.archiveChoice = choice
+    }
+
     // MARK: Items
 
     func add(_ urls: [URL]) {
@@ -130,17 +166,34 @@ final class AppModel {
         }
     }
 
-    /// Compresses the pending items into one archive, or extracts each pending archive beside itself.
-    func start() {
-        guard let action = pendingAction else { return }
+    /// Set while the window asks whether the originals may go to the Trash.
+    var isConfirmingTrash = false
+
+    var canStart: Bool {
+        guard let action = pendingAction else { return false }
+        if case .compress = action { return passwordProblem == nil }
+        return true
+    }
+
+    /// Compresses the pending items into one archive, or extracts each pending archive
+    /// beside itself. With "Move originals to the Trash" on, asks first.
+    func start(trashConfirmed: Bool = false) {
+        guard let action = pendingAction, canStart else { return }
+        if case .compress = action, choice.trashesOriginals, !trashConfirmed {
+            isConfirmingTrash = true
+            return
+        }
         clearPendingItems()
         let queue = queue
         let registry = registry
         let choice = choice
+        let password = takesPassword && !password.isEmpty ? password : nil
+        self.password = ""
+        passwordConfirmation = ""
         let cleanup = cleanupTask
         let settings = settings
         let willWrite: ArchiveJobs.OutputFolderHandler = { folder in settings.noteOutputDirectory(folder) }
-        Task.detached(priority: .userInitiated) {
+        Task.detached(priority: .userInitiated) { [weak self] in
             // Launch cleanup must not delete the partial file of a job started right after launch.
             await cleanup?.value
             switch action {
@@ -150,18 +203,60 @@ final class AppModel {
                     items: items,
                     destination: ArchivePlanner.destination(for: items, format: choice.format),
                     step: choice.step,
-                    options: choice.options
+                    options: choice.options,
+                    password: password,
+                    excludesMacOSJunk: choice.excludesMacOSJunk,
+                    volumeBytes: choice.volumeBytes
                 )
-                await ArchiveJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
+                let afterwards = ArchiveJobs.Afterwards(verifies: choice.verifies, trashesOriginals: choice.trashesOriginals)
+                await ArchiveJobs.compress(request, engine: engine, on: queue, afterwards: afterwards, willWrite: willWrite)
             case let .extract(archives):
-                // One at a time, so the jobs run in the order the archives were dropped.
+                // One at a time, so the jobs run in the order the archives were dropped,
+                // and a password can be asked for before the next one starts.
                 for archive in archives {
                     guard let engine = registry.extractor(for: archive) else { continue }
-                    let request = ExtractRequest(archive: archive, destinationDirectory: archive.deletingLastPathComponent())
-                    await ArchiveJobs.extract(request, engine: engine, on: queue, willWrite: willWrite)
+                    var password: String?
+                    while true {
+                        let request = ExtractRequest(archive: archive, destinationDirectory: archive.deletingLastPathComponent(),
+                                                     password: password)
+                        let id = await ArchiveJobs.extract(request, engine: engine, on: queue, willWrite: willWrite)
+                        guard case let .failed(error)? = await queue.waitUntilDone(id)?.state,
+                              error == .passwordRequired || error == .wrongPassword,
+                              let entered = await self?.askForPassword(archive: archive, wasWrong: error == .wrongPassword)
+                        else { break }
+                        password = entered
+                    }
                 }
             }
         }
+    }
+
+    // MARK: Passwords for extracting
+
+    struct PasswordRequest: Identifiable {
+        let id = UUID()
+        let archiveName: String
+        let wasWrong: Bool
+    }
+
+    /// Set while the window asks for an archive's password.
+    private(set) var passwordRequest: PasswordRequest?
+    @ObservationIgnored private var passwordContinuation: CheckedContinuation<String?, Never>?
+
+    /// - Returns: The password entered, or nil if the person cancelled.
+    func askForPassword(archive: URL, wasWrong: Bool) async -> String? {
+        answerPasswordRequest(nil)
+        return await withCheckedContinuation { continuation in
+            passwordContinuation = continuation
+            passwordRequest = PasswordRequest(archiveName: archive.lastPathComponent, wasWrong: wasWrong)
+        }
+    }
+
+    func answerPasswordRequest(_ password: String?) {
+        passwordRequest = nil
+        let continuation = passwordContinuation
+        passwordContinuation = nil
+        continuation?.resume(returning: password.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     // MARK: Jobs

@@ -59,6 +59,42 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.archiveChoice.method(for: .sevenZip), .lzma2)
     }
 
+    func testAdvancedSettingsAreRememberedButNotForEveryFormat() {
+        var choice = ArchiveChoice(format: .sevenZip, step: .best)
+        choice.advanced.dictionaryMebibytes = 64
+        choice.advanced.solid = .off
+        choice.threads = 2
+        choice.excludesMacOSJunk = false
+        choice.volumeMebibytes = 100
+        choice.verifies = true
+        choice.trashesOriginals = true
+        store.archiveChoice = choice
+        let restored = SettingsStore(defaults: defaults).archiveChoice
+        XCTAssertEqual(restored, choice)
+        XCTAssertEqual(restored.options.threads, 2)
+        XCTAssertEqual(restored.options.advanced.dictionaryMebibytes, 64)
+        XCTAssertEqual(restored.volumeBytes, 100 << 20)
+        // Only 7Z and ZIP (without Zstandard) split.
+        var zstd = restored
+        zstd.format = .zip
+        zstd.setMethod(.zstd, for: .zip)
+        XCTAssertNil(zstd.volumeBytes)
+        zstd.format = .tarXz
+        XCTAssertNil(zstd.volumeBytes)
+    }
+
+    func testOlderChoicesGetTheSafeDefaults() {
+        defaults.set(Data(#"{"format":"zip","step":2,"methods":{"zip":"lzma"}}"#.utf8), forKey: SettingsStore.Key.archiveChoice)
+        let choice = store.archiveChoice
+        XCTAssertTrue(choice.excludesMacOSJunk)
+        XCTAssertFalse(choice.verifies)
+        XCTAssertFalse(choice.trashesOriginals)
+        XCTAssertNil(choice.volumeMebibytes)
+        XCTAssertNil(choice.threads)
+        XCTAssertEqual(choice.advanced, AdvancedOptions())
+        XCTAssertEqual(choice.method(for: .zip), .lzma)
+    }
+
     func testRecentOutputDirectoriesAreDedupedNewestFirstAndCapped() {
         let a = URL(fileURLWithPath: "/tmp/a", isDirectory: true)
         let b = URL(fileURLWithPath: "/tmp/b", isDirectory: true)

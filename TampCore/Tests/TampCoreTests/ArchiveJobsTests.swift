@@ -56,4 +56,39 @@ final class ArchiveJobsTests: EngineTestCase {
         XCTAssertEqual(done?.state, .failed(.helperMissing(name: "7zz")))
         XCTAssertEqual(try contents(of: output), [])
     }
+
+    func testVerifyThenTrashTheOriginals() async throws {
+        let registry = EngineRegistry.standard()
+        let queue = JobQueue()
+        let engine = try XCTUnwrap(registry.engine(for: .sevenZip))
+        let copy = workspace.appendingPathComponent("Copy")
+        try fileManager.copyItem(at: project, to: copy)
+        let id = await ArchiveJobs.compress(
+            CompressRequest(items: [copy], destination: output.appendingPathComponent("Copy.7z"), step: .fast),
+            engine: engine, on: queue, afterwards: ArchiveJobs.Afterwards(verifies: true, trashesOriginals: true)
+        )
+        let done = await queue.waitUntilDone(id)
+        XCTAssertEqual(done?.state, .finished)
+        XCTAssertEqual(try contents(of: output), ["Copy.7z"], "the check leaves nothing behind")
+        XCTAssertFalse(fileManager.fileExists(atPath: copy.path), "the original went to the Trash")
+    }
+
+    func testVerificationFindsWhatAnArchiveLost() throws {
+        let copy = workspace.appendingPathComponent("Copy")
+        try fileManager.copyItem(at: project, to: copy)
+        let lenient = ArchiveVerifier.Allowances(junkMayBeMissing: true)
+        XCTAssertNil(ArchiveVerifier.difference(between: project, and: copy, allowances: lenient, fileManager: fileManager))
+        try Data("changed".utf8).write(to: copy.appendingPathComponent("readme.txt"))
+        XCTAssertEqual(ArchiveVerifier.difference(between: project, and: copy, allowances: lenient, fileManager: fileManager),
+                       "“Project/readme.txt” differs")
+        try fileManager.removeItem(at: copy.appendingPathComponent("data"))
+        XCTAssertEqual(ArchiveVerifier.difference(between: project, and: copy, allowances: lenient, fileManager: fileManager),
+                       "“Project/data” is missing")
+        // Junk the job left out on purpose doesn't count.
+        let clean = workspace.appendingPathComponent("Clean")
+        try fileManager.copyItem(at: project, to: clean)
+        try fileManager.removeItem(at: clean.appendingPathComponent(".DS_Store"))
+        XCTAssertNil(ArchiveVerifier.difference(between: project, and: clean, allowances: lenient, fileManager: fileManager))
+        XCTAssertNotNil(ArchiveVerifier.difference(between: project, and: clean, allowances: .init(), fileManager: fileManager))
+    }
 }

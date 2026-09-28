@@ -12,6 +12,9 @@ public struct CompressRequest: Sendable {
     public var password: String?
     /// Leaves out .DS_Store, AppleDouble "._" files and __MACOSX folders.
     public var excludesMacOSJunk: Bool
+    /// Splits the archive into parts of this size ("Name.7z.001", ...), for formats
+    /// that can (see `ArchiveFormat.canSplit`). Nil writes one file.
+    public var volumeBytes: Int64?
 
     public init(
         items: [URL],
@@ -19,7 +22,8 @@ public struct CompressRequest: Sendable {
         step: SpeedStep,
         options: ArchiveOptions = ArchiveOptions(),
         password: String? = nil,
-        excludesMacOSJunk: Bool = true
+        excludesMacOSJunk: Bool = true,
+        volumeBytes: Int64? = nil
     ) {
         self.items = items
         self.destination = destination
@@ -27,6 +31,7 @@ public struct CompressRequest: Sendable {
         self.options = options
         self.password = password
         self.excludesMacOSJunk = excludesMacOSJunk
+        self.volumeBytes = volumeBytes.map { max(64 * 1024, $0) }
     }
 }
 
@@ -107,9 +112,11 @@ public struct HelperLocator: Sendable {
 
 extension JobContext {
     /// Turns an engine's fractional progress into byte counts for the job's ETA.
-    public func progressHandler(totalBytes: Int64) -> ProgressHandler {
+    /// - Parameter offset: Bytes already done before this step, such as the
+    ///   compressing that comes before checking the archive.
+    public func progressHandler(totalBytes: Int64, offset: Int64 = 0) -> ProgressHandler {
         { [self] fraction in
-            let bytes = Int64(Double(totalBytes) * min(1, max(0, fraction)))
+            let bytes = offset + Int64(Double(totalBytes) * min(1, max(0, fraction)))
             Task { await self.reportProgress(bytesProcessed: bytes) }
         }
     }

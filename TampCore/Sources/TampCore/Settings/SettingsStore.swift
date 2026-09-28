@@ -1,11 +1,20 @@
 import Foundation
 
-/// The format, speed step and inner methods last used, restored at launch.
+/// The format, speed step, inner methods and Advanced panel settings last used,
+/// restored at launch. Passwords are never saved.
 public struct ArchiveChoice: Codable, Equatable, Sendable {
     public var format: ArchiveFormat
     public var step: SpeedStep
     /// The method last chosen for each format that has several, keyed by the format's raw value.
     private var methods: [String: CompressionMethod]
+    public var advanced = AdvancedOptions()
+    /// Nil uses every core.
+    public var threads: Int?
+    public var excludesMacOSJunk = true
+    /// Split 7Z and ZIP archives into parts of this size; nil writes one file.
+    public var volumeMebibytes: Int?
+    public var verifies = false
+    public var trashesOriginals = false
 
     public init(format: ArchiveFormat, step: SpeedStep, methods: [ArchiveFormat: CompressionMethod] = [:]) {
         self.format = format
@@ -27,19 +36,31 @@ public struct ArchiveChoice: Codable, Equatable, Sendable {
 
     /// The current format's settings, for a compress request or a hint.
     public var options: ArchiveOptions {
-        ArchiveOptions(method: method(for: format))
+        ArchiveOptions(threads: threads ?? ProcessInfo.processInfo.activeProcessorCount, method: method(for: format), advanced: advanced)
+    }
+
+    /// The part size in bytes, when the current format and method can be split.
+    public var volumeBytes: Int64? {
+        guard let volumeMebibytes, format.canSplit(method: method(for: format)) else { return nil }
+        return Int64(max(1, volumeMebibytes)) << 20
     }
 
     private enum CodingKeys: String, CodingKey {
-        case format, step, methods
+        case format, step, methods, advanced, threads, excludesMacOSJunk, volumeMebibytes, verifies, trashesOriginals
     }
 
-    /// Settings saved before inner methods existed have no "methods".
+    /// Settings saved by an older Tamp lack the newer keys, which keep their defaults.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         format = try container.decode(ArchiveFormat.self, forKey: .format)
         step = try container.decode(SpeedStep.self, forKey: .step)
         methods = (try? container.decodeIfPresent([String: CompressionMethod].self, forKey: .methods)) ?? [:]
+        advanced = (try? container.decodeIfPresent(AdvancedOptions.self, forKey: .advanced)) ?? AdvancedOptions()
+        threads = try? container.decodeIfPresent(Int.self, forKey: .threads)
+        excludesMacOSJunk = (try? container.decodeIfPresent(Bool.self, forKey: .excludesMacOSJunk)) ?? true
+        volumeMebibytes = try? container.decodeIfPresent(Int.self, forKey: .volumeMebibytes)
+        verifies = (try? container.decodeIfPresent(Bool.self, forKey: .verifies)) ?? false
+        trashesOriginals = (try? container.decodeIfPresent(Bool.self, forKey: .trashesOriginals)) ?? false
     }
 }
 

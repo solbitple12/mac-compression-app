@@ -89,6 +89,33 @@ final class SafeOutputTests: XCTestCase {
         XCTAssertEqual(try contents(), [])
     }
 
+    func testVolumesMoveOutTogetherUnderAFreeName() async throws {
+        let destination = directory.appendingPathComponent("Photos.7z")
+        // "Photos.7z.002" is taken, so the parts become "Photos 2.7z.001" and so on.
+        try Data("old".utf8).write(to: directory.appendingPathComponent("Photos.7z.002"))
+        let first = try await SafeOutput.writeVolumes(to: destination, fileExtension: "7z") { folder, name in
+            XCTAssertEqual(name, "Photos.7z")
+            for part in ["001", "002", "003"] {
+                try Data(part.utf8).write(to: folder.appendingPathComponent("\(name).\(part)"))
+            }
+        }
+        XCTAssertEqual(first.lastPathComponent, "Photos 2.7z.001")
+        XCTAssertEqual(try contents(), ["Photos 2.7z.001", "Photos 2.7z.002", "Photos 2.7z.003", "Photos.7z.002"])
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("Photos 2.7z.003")), Data("003".utf8))
+    }
+
+    func testFailedVolumesLeaveNothing() async throws {
+        struct Failure: Error {}
+        do {
+            _ = try await SafeOutput.writeVolumes(to: directory.appendingPathComponent("Photos.zip"), fileExtension: "zip") { folder, name in
+                try Data("part".utf8).write(to: folder.appendingPathComponent("\(name).001"))
+                throw Failure()
+            }
+            XCTFail("Expected the failure")
+        } catch is Failure {}
+        XCTAssertEqual(try contents(), [])
+    }
+
     func testCommitRefusesToReplace() throws {
         let source = directory.appendingPathComponent("a")
         let target = directory.appendingPathComponent("b")

@@ -36,6 +36,15 @@ public struct SevenZipEngine: ArchiveEngine {
             switches += request.options.advanced.encryptFileNames ? ["-mhe=on", "-p"] : ["-p"]
         }
 
+        if let volumeBytes = request.volumeBytes {
+            return try await SafeOutput.writeVolumes(to: destination, fileExtension: format.fileExtension) { folder, name in
+                try await tool.run(
+                    ["a"] + switches + ["-v\(volumeBytes)b", "--", folder.appendingPathComponent(name).path] + request.items.map(\.path),
+                    password: password,
+                    progress: progress
+                )
+            }
+        }
         return try await SafeOutput.write(to: destination, fileExtension: format.fileExtension) { temporary in
             try await tool.run(
                 ["a"] + switches + ["--", temporary.path] + request.items.map(\.path),
@@ -46,10 +55,6 @@ public struct SevenZipEngine: ArchiveEngine {
     }
 
     public func extract(_ request: ExtractRequest, progress: @escaping ProgressHandler) async throws -> URL {
-        try await tool.extract(
-            request,
-            archiveBaseName: request.archive.deletingPathExtension().lastPathComponent,
-            progress: progress
-        )
+        try await tool.extract(request, archiveBaseName: ArchiveDetector.baseName(of: request.archive), progress: progress)
     }
 }

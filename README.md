@@ -23,7 +23,7 @@ Work in progress. Phase 1 is being built in small steps.
 | `scripts/bundle-helpers.sh` | Xcode build phase that copies and signs the helpers into the app |
 | `scripts/release.sh` | Release build, Developer ID signing, notarization and stapling; `--dry-run` checks without a certificate |
 | `docs/signing-and-notarization.md` | One-time setup and release steps for a notarized Developer ID build |
-| `.github/workflows/ci.yml` | Builds the helpers, tests `TampCore`, builds, checks and launches the app, and runs the release dry run on macOS runners |
+| `.github/workflows/ci.yml` | On macOS runners: builds the helpers, tests `TampCore`, builds, checks and launches the app; the UI smoke test and release dry run run on `main` or with the `full-ci` label |
 
 ## Build and test
 
@@ -54,9 +54,21 @@ this Mac only. To make a build others can download, see
 Drop files or folders on the window, pick a format and a speed step, and press
 Compress. Dropping only archives Tamp can open extracts them instead: everything it
 writes, plus RAR, CAB, ISO and CPIO, and lone compressed files such as `dump.sql.gz`,
-which become the file they hold. A file counts as an archive only when its name and
+which become the file they hold. Any part of a split archive (`Photos.7z.002`,
+`Film.part2.rar`) opens the whole archive from its first part, once. A protected
+archive asks for its password. A file counts as an archive only when its name and
 its first bytes agree, so a `.docx` (a ZIP inside) is compressed, not taken apart. Output goes next to the originals and never replaces an existing file.
-Tamp remembers the last format and step.
+Tamp remembers the last format, step and Advanced settings, but never a password.
+
+The Advanced panel under the slider holds a password (7Z, ZIP, ZPAQ, Disk Image;
+sent to each tool on stdin, never as an argument), splitting 7Z and ZIP into parts,
+leaving out Mac-only files, checking the archive after compressing (it's opened again
+into a hidden folder and compared with the originals byte for byte), and moving the
+originals to the Trash afterwards, which asks first and happens only once the archive
+is written and checked. It also shows the tuning settings the chosen format has:
+7Z dictionary, word size, solid blocks, BCJ2 filter and file name encryption; ZIP
+encryption (AES-256 or ZipCrypto); threads; the TAR.ZST long-range window (at most
+128 MB); the TAR.XZ block size; the ZPAQ block size; and Brotli's 256 MB window.
 
 ## Speed steps
 
@@ -66,10 +78,27 @@ Every format shows the same slider: Store, Fastest, Fast, Normal, Good, Best.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Store | -mx0 | -mx0 | plain .tar | plain .tar | plain .tar | plain .tar | plain .tar | plain .tar | plain .tar | -m0 |
 | Fastest | -mx1 | -mx1 | -1 | -1 | -0 | -1 | 1 | 0 | -q 1 | -m1 |
-| Fast | -mx3 | -mx3 | -3 | -3 | -2 | -3 | 3 | 3 | -q 4 | -m2 |
+| Fast | -mx5 -mfb8 | -mx3 | -3 | -3 | -2 | -3 | 3 | 3 | -q 4 | -m2 |
 | Normal | -mx5 | -mx5 | -6 | -6 | -6 | -9 | 6 | 6 | -q 6 | -m3 |
 | Good | -mx7 | -mx7 | -9 | -8 | -8 | -15 --long=27 | 8 | 8 | -q 9 | -m4 |
 | Best | -mx9 | -mx9 | -11 (Zopfli) | -9 | -9e | --ultra -22 --long=27 | 9 | 9 | -q 11 | -m5 |
+
+| Step | Apple Archive | Disk Image (hdiutil) |
+| --- | --- | --- |
+| Store | no compression | UDRO |
+| Fastest | LZ4, 4 MB blocks | UDZO, zlib level 1 |
+| Fast | LZFSE, 4 MB blocks | ULFO (LZFSE) |
+| Normal | zlib, 4 MB blocks | UDZO, zlib level 6 |
+| Good | LZMA, 4 MB blocks | UDZO, zlib level 9 |
+| Best | LZMA, 16 MB blocks | ULMO (LZMA) |
+
+7-Zip's Deflate writes the same file at levels 1 to 4, so ZIP's Fast is level 5 with
+short matches (8 "fast bytes"): halfway between Fastest and Normal in size and time on
+the benchmark set. TAR.BZ2's levels only change bzip2's block size, so Normal to Best
+differ by under 1%. Apple Archive goes through Apple's AppleArchive framework and keeps
+everything macOS stores about a file; it opens only on macOS 11 and later. Disk images
+open only on a Mac; Tamp opens one by mounting it read-only out of sight and copying
+its contents out.
 
 Plain TAR only bundles, so its slider stays on Store. TAR.LZ4 and TAR.LZ go through
 libarchive's own filters, whose levels stop at 9. The zstd window is capped at 27
@@ -90,7 +119,7 @@ records and the test corpus). `tamp-bench` compresses and extracts it with every
 step and method, and at several thread counts, in a child process per run, and reports
 ratio, time, speed, the largest helper's peak memory next to the hint's estimate, and
 adjacent steps that come out nearly identical. The Benchmark workflow runs it on a
-GitHub macOS runner when the tool changes, or by hand.
+GitHub macOS runner by hand, or when the pull request is labeled `benchmark`.
 
 ```sh
 scripts/make-bench-set.sh build/bench-set
@@ -102,10 +131,10 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 
 - ZIP and 7Z extraction fail on a symlink whose target starts with `../`, even when it
   stays inside the archive: 7-Zip rejects such links as unsafe. The TAR formats keep them.
-- ZPAQ doesn't store symbolic links, and can't take a password yet (zpaq only accepts
-  one as a command-line argument). ZIP with Zstandard can't take a password yet either.
-- Split archives (`.part2.rar`, `.7z.002`) are each offered for extraction on their own;
-  only the first part works.
+- ZPAQ doesn't store symbolic links.
+- Disk images keep .DS_Store and other Mac-only files: hdiutil copies everything.
+- Apple Archive can't take a password yet.
+- ZIP with Zstandard can't be split into parts (minizip writes it, not 7-Zip).
 - If two copies of Tamp run at once, the one launched second can remove the other's
   unfinished output while cleaning up after crashes.
 
@@ -129,7 +158,8 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 
 Tamp patches three of them, with the patches in `scripts/patches`: minizip-ng (store link
 targets the Info-ZIP way, skip Mac junk files, read the password from stdin, mark archives
-as made on Unix), zpaq (never extract outside the target folder) and pbzip2 (build fix
+as made on Unix), zpaq (never extract outside the target folder, read the password from stdin with `-key -`)
+and pbzip2 (build fix
 from Homebrew). None of the components is GPL-only.
 
 7-Zip is built from the unmodified source release above, which also satisfies the

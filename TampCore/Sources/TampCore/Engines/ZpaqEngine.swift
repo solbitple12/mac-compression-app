@@ -50,7 +50,7 @@ public struct ZpaqMapping: SpeedStepMapping {
 
     /// Per thread, since each thread compresses its own block: a fixed part plus a
     /// multiple of the block, fitted to single-thread peaks of zpaq 7.15 with full
-    /// blocks of 72 MB of text (for example -m2 at 64 MiB blocks: 388 MB).
+    /// blocks of 72 MB of text (for example -m2 at 64 MiB blocks: 388 MB, -m5: 787 MB).
     static func memory(for parameters: ZpaqParameters) -> UInt64 {
         let threads = UInt64(max(1, parameters.threads))
         let blockMebibytes = parameters.blockBytes / .mebibyte
@@ -59,7 +59,7 @@ public struct ZpaqMapping: SpeedStepMapping {
         case 1: (44, 4)
         case 2: (24, 6)
         case 3, 4: (28, 5)
-        default: (300, 6)
+        default: (167, 10)
         }
         return threads * (fixed + perBlockMebibyte * blockMebibytes) * .mebibyte
     }
