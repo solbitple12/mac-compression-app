@@ -63,7 +63,7 @@ public final class SystemResources: ResourceSampling, @unchecked Sendable {
             guard let self else { return }
             let event = source.data
             let level: MemoryPressure = event.contains(.critical) ? .critical : event.contains(.warning) ? .warning : .normal
-            lock.withLock { pressure = level }
+            self.lock.withLock { self.pressure = level }
         }
         source.activate()
     }

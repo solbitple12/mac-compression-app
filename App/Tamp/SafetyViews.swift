@@ -12,9 +12,7 @@ struct StartQuestionView: View {
             case let .memory(needed, available, fix):
                 Text("This job may need more memory than is free")
                     .font(.headline)
-                Text("\(model.effectiveStep.title) with \(model.choice.options.threads) threads could use about "
-                     + "\(EstimateText.memory(needed)), and \(EstimateText.memory(available)) is free. "
-                     + "Other apps may slow down, and Tamp will pause the job if memory runs out.")
+                Text("\(model.effectiveStep.title) with \(model.choice.options.threads) threads could use about \(EstimateText.memory(needed)), and \(EstimateText.memory(available)) is free. Other apps may slow down, and Tamp will pause the job if memory runs out.")
                     .fixedSize(horizontal: false, vertical: true)
                 if let lower = fix.lowerStep {
                     Button("Use \(lower.step.title) (about \(EstimateText.memory(lower.memory)))") {
@@ -32,9 +30,7 @@ struct StartQuestionView: View {
             case let .disk(needed, free, volume):
                 Text("“\(volume)” may run out of space")
                     .font(.headline)
-                Text("The archive\(model.choice.verifies ? ", its check" : "") and a safety margin need up to "
-                     + "\(EstimateText.file(needed)), and \(EstimateText.file(free)) is free. "
-                     + "If space runs short, Tamp pauses the job and asks what to do.")
+                Text("The archive\(model.choice.verifies ? ", its check" : "") and a safety margin need up to \(EstimateText.file(needed)), and \(EstimateText.file(free)) is free. If space runs short, Tamp pauses the job and asks what to do.")
                     .fixedSize(horizontal: false, vertical: true)
                 buttons(continueTitle: "Continue Anyway", approval: .disk)
             case let .longJob(estimate):
@@ -43,8 +39,7 @@ struct StartQuestionView: View {
                 Text("\(model.effectiveStep.title) on this input is slow. A faster step saves time for a somewhat larger archive.")
                     .fixedSize(horizontal: false, vertical: true)
                 if let faster = model.fasterOption {
-                    Button("Use \(faster.step.title): \(EstimateText.duration(faster.estimate.seconds)), "
-                           + "\(EstimateText.size(faster.estimate.outputBytes))") {
+                    Button("Use \(faster.step.title): \(EstimateText.duration(faster.estimate.seconds)), \(EstimateText.size(faster.estimate.outputBytes))") {
                         model.useStep(faster.step, approving: .longJob)
                     }
                     .accessibilityIdentifier("useFasterStep")

@@ -26,12 +26,21 @@ jobs:
       - name: Show toolchain
         run: swift --version
       - name: Restore built helpers
-        uses: actions/cache@v4
+        id: helpers
+        uses: actions/cache/restore@v4
         with:
           path: build/helpers
           key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
       - name: Build helpers
         run: scripts/build-helpers.sh
+      # Saved right away rather than at the end, so a failing test doesn't cost the
+      # next run another few minutes of rebuilding the helpers.
+      - name: Save built helpers
+        if: steps.helpers.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/helpers
+          key: ${{ steps.helpers.outputs.cache-primary-key }}
       - name: Build and test TampCore
         env:
           TAMP_HELPERS_DIR: ${{ github.workspace }}/build/helpers/bin

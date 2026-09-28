@@ -16,7 +16,7 @@ private final class FakeSampler: ResourceSampling, @unchecked Sendable {
 }
 
 /// A clock the test moves by hand.
-private final class TestClock: @unchecked Sendable {
+private final class MonitorClock: @unchecked Sendable {
     private let lock = NSLock()
     private var time: TimeInterval = 1000
 
@@ -61,13 +61,13 @@ final class ResourcePolicyTests: XCTestCase {
 final class ResourceMonitorTests: XCTestCase {
     private var queue: JobQueue!
     private var sampler: FakeSampler!
-    private var clock: TestClock!
+    private var clock: MonitorClock!
     private var monitor: ResourceMonitor!
 
     override func setUp() {
         queue = JobQueue()
         sampler = FakeSampler()
-        clock = TestClock()
+        clock = MonitorClock()
         let clock = clock!
         monitor = ResourceMonitor(queue: queue, sampler: sampler, clock: { clock.now })
     }

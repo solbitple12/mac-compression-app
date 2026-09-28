@@ -127,6 +127,28 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
   tamp-bench --input build/bench-set --markdown build/bench.md
 ```
 
+## Estimates and safety
+
+- Next to the slider, Tamp shows time, size and memory for the current settings, such as
+  "Best: ~4 min · ~350 MB · uses ~2.1 GB RAM". It gets them by running the real engine for
+  at most 3 seconds on slices of the largest files (and on a few small files, for the cost
+  of each file), then scaling up by size, file count and a per-format thread curve from
+  the benchmark. Ranges appear when the samples disagree. Until the probe finishes, a
+  figure from earlier jobs is shown, marked "rough".
+- Each finished job is recorded in `~/Library/Application Support/Tamp/History.json`.
+  Later estimates for the same format and step are multiplied by the median of actual
+  over estimated time for the last 20 runs. Nothing leaves the Mac.
+- Before starting, Tamp asks when the job may need more than 70% of free memory (offering
+  a lower step or fewer threads), when the archive may not fit on the disk with 1 GB to
+  spare, and when it will take more than 30 minutes (offering a faster step).
+- While a job runs, Tamp samples its helpers' memory, the system's memory pressure, swap
+  and free disk space every second. It warns with a yellow banner, and when things turn
+  critical it pauses the job (SIGSTOP) and asks: Resume, Stop Safely, or Restart with a
+  lower step and fewer threads. Unanswered and still critical after 60 seconds, it stops
+  the job safely on its own. Pausing keeps the memory a job holds; only stopping frees it.
+- Stopping one archive while extracting several stops the batch; the archives not yet
+  extracted can be resumed from the Jobs list, even after quitting Tamp.
+
 ## Known issues
 
 - ZIP and 7Z extraction fail on a symlink whose target starts with `../`, even when it
@@ -134,6 +156,9 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 - ZPAQ doesn't store symbolic links.
 - Disk images keep .DS_Store and other Mac-only files: hdiutil copies everything.
 - Apple Archive can't take a password yet.
+- Estimates cover compressing only; extracting shows a live ETA once it starts.
+- Only one job runs at a time, so the memory checks hold.
+- The thresholds (70%, 1 GB, 30 minutes, 60 seconds) are fixed until Preferences arrive in Phase 6.
 - ZIP with Zstandard can't be split into parts (minizip writes it, not 7-Zip).
 - If two copies of Tamp run at once, the one launched second can remove the other's
   unfinished output while cleaning up after crashes.
