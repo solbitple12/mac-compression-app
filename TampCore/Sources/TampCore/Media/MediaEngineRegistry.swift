@@ -12,9 +12,9 @@ public struct MediaEngineRegistry: Sendable {
         self.audioEngines = audioEngines
     }
 
-    /// No engines yet: filled in as each Phase 3 helper is bundled.
+    /// More image and audio engines arrive one at a time through Phase 3.
     public static func standard(helpers: HelperLocator = .standard) -> MediaEngineRegistry {
-        MediaEngineRegistry()
+        MediaEngineRegistry(imageEngines: [OxipngEngine(helpers: helpers)])
     }
 
     public var availableImageFormats: [ImageFormat] {

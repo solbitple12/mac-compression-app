@@ -442,6 +442,26 @@ build_minizip() {
   stamp minizip "$version"
 }
 
+# oxipng for PNG. It's Rust, unlike every other helper here, so it needs a Rust
+# toolchain with both Apple targets (macOS runners and Homebrew's rustup both have
+# a recent stable Rust; `rustup target add` fetches the extra target if missing).
+build_oxipng() {
+  built oxipng "$OXIPNG_VERSION" && return
+  command -v cargo >/dev/null || { echo "oxipng needs a Rust toolchain: install rustup" >&2; exit 1; }
+  local dir="$SRC/oxipng-$OXIPNG_VERSION"
+  fetch_git "$OXIPNG_GIT" "v$OXIPNG_VERSION" "$OXIPNG_COMMIT" "$dir"
+  rustup target add aarch64-apple-darwin x86_64-apple-darwin >/dev/null 2>&1 || true
+  local slices=()
+  for target in aarch64-apple-darwin x86_64-apple-darwin; do
+    echo "Building oxipng $OXIPNG_VERSION for $target"
+    (cd "$dir" && MACOSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" cargo build --release --target "$target" --bin oxipng >/dev/null)
+    slices+=("$dir/target/$target/release/oxipng")
+  done
+  lipo -create -output "$BIN/oxipng" "${slices[@]}"
+  cp "$dir/LICENSE" "$LICENSES/oxipng.txt"
+  stamp oxipng "$OXIPNG_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -451,3 +471,4 @@ build_pbzip2
 build_brotli
 build_zpaq
 build_minizip
+build_oxipng
