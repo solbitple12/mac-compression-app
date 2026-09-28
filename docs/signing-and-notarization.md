@@ -4,7 +4,7 @@ Tamp ships outside the Mac App Store. For Gatekeeper to open a downloaded copy
 without warnings, Tamp has to be signed with a Developer ID certificate, sent to
 Apple's notary service, and stapled with the ticket that comes back.
 `scripts/release.sh` does all of that. Its dry run checks the build without a
-certificate, and CI runs the dry run on every push.
+certificate, and CI runs the dry run on every pull request and every push to main.
 
 Your certificate, passwords and keys stay in your own keychain. None of them go
 into this repository or into CI.
@@ -89,13 +89,16 @@ Set the version in `project.yml` (`MARKETING_VERSION`, and increase
 
 ## Checking a download on another Mac
 
-Download the zip in a browser (so it gets the quarantine flag), unzip it, and open
-Tamp. It should open with only the usual "downloaded from the internet" prompt. To
-see what Gatekeeper decided:
+Download the zip in a browser (so it gets the quarantine flag), unzip it, drag
+Tamp.app into /Applications, and open it. It should open with only the usual
+"downloaded from the internet" prompt. To see what Gatekeeper decided about that copy:
 
 ```sh
 spctl --assess --type execute -vv /Applications/Tamp.app
 ```
+
+If an older Tamp was already in /Applications, replace it first, or the command
+checks the old copy.
 
 ## When notarization fails
 
@@ -104,6 +107,7 @@ The notary log names the file and the reason. The common ones:
 | Log says | Cause | Fix |
 | --- | --- | --- |
 | The binary is not signed | A helper was copied in without signing | Rebuild with `scripts/release.sh`; `scripts/bundle-helpers.sh` signs each helper |
+| The binary is not signed with a valid Developer ID certificate | Signed with an Apple Development or ad-hoc identity | Set `TAMP_SIGN_IDENTITY` to the Developer ID Application identity |
 | The executable does not have the hardened runtime enabled | A binary was signed without `--options runtime` | Same as above; the dry run catches this |
 | The signature does not include a secure timestamp | Signed with `--timestamp=none` | Only the ad-hoc dry run does that; the real run uses `--timestamp` |
 | The executable requests the com.apple.security.get-task-allow entitlement | A Debug build was submitted | Submit the Release build from `scripts/release.sh` |

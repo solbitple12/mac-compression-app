@@ -82,7 +82,7 @@ for exe in "${executables[@]}"; do
       || fail "$name needs macOS $minos, newer than $MIN_MACOS"
   done
 
-  details="$(codesign -d --verbose=2 "$exe" 2>&1)"
+  details="$(codesign -d --verbose=2 "$exe" 2>&1)" || fail "$name isn't signed: $details"
   grep -q 'flags=.*runtime' <<<"$details" || fail "$name isn't signed with the hardened runtime"
   if [ "$dry_run" = 0 ]; then
     grep -q "^Authority=Developer ID Application" <<<"$details" || fail "$name isn't signed with Developer ID"
