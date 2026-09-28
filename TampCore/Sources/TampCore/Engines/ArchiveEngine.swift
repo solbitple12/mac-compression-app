@@ -44,13 +44,24 @@ public struct ExtractRequest: Sendable {
     }
 }
 
-/// One adapter per tool. Every adapter writes through `SafeOutput`, so a
+/// Opens one kind of archive. Every extractor writes through `SafeOutput`, so a
 /// cancelled or failed job leaves nothing behind.
-public protocol ArchiveEngine: SpeedStepMapping {
-    /// - Returns: The archive that was written.
-    func compress(_ request: CompressRequest, progress: @escaping ProgressHandler) async throws -> URL
+public protocol ArchiveExtractor: Sendable {
+    /// The format, when Tamp can also write it; nil for RAR, CAB, ISO, CPIO and
+    /// lone compressed files, which Tamp only opens.
+    var writableFormat: ArchiveFormat? { get }
     /// - Returns: The extracted file or folder.
     func extract(_ request: ExtractRequest, progress: @escaping ProgressHandler) async throws -> URL
+}
+
+/// One adapter per tool for a format Tamp writes as well as opens.
+public protocol ArchiveEngine: ArchiveExtractor, SpeedStepMapping {
+    /// - Returns: The archive that was written.
+    func compress(_ request: CompressRequest, progress: @escaping ProgressHandler) async throws -> URL
+}
+
+extension ArchiveEngine {
+    public var writableFormat: ArchiveFormat? { format }
 }
 
 /// Finds bundled helper executables: `TAMP_HELPERS_DIR` first (build scripts and

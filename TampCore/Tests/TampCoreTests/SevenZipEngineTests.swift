@@ -116,6 +116,6 @@ final class SevenZipEngineTests: EngineTestCase {
             progress: { _ in }
         )
         XCTAssertEqual(ArchiveDetector.format(of: archive), .sevenZip)
-        XCTAssertEqual(EngineRegistry.standard().extractor(for: archive)?.format, .sevenZip)
+        XCTAssertEqual(EngineRegistry.standard().extractor(for: archive)?.writableFormat, .sevenZip)
     }
 }

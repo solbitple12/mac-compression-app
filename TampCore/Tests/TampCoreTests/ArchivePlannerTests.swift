@@ -67,18 +67,18 @@ final class ArchivePlannerTests: XCTestCase {
     }
 
     func testTarFamilyArchivesOpenWithTheTarEngine() throws {
-        XCTAssertEqual(registry.extractor(for: try file("plain.tar", bytes: tarHeader))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("a.tar.gz", bytes: [0x1F, 0x8B, 8, 0]))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("a.tgz", bytes: [0x1F, 0x8B, 8, 0]))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("a.tar.bz2", bytes: Array("BZh9".utf8)))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("a.txz", bytes: [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("a.tar.lz4", bytes: [0x04, 0x22, 0x4D, 0x18]))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("a.tar.lz", bytes: Array("LZIP".utf8)))?.format, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("plain.tar", bytes: tarHeader))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.tar.gz", bytes: [0x1F, 0x8B, 8, 0]))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.tgz", bytes: [0x1F, 0x8B, 8, 0]))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.tar.bz2", bytes: Array("BZh9".utf8)))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.txz", bytes: [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.tar.lz4", bytes: [0x04, 0x22, 0x4D, 0x18]))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.tar.lz", bytes: Array("LZIP".utf8)))?.writableFormat, .tar)
         // Brotli has no signature, so the name alone counts.
-        XCTAssertEqual(registry.extractor(for: try file("a.tar.br", bytes: [0x1B, 0x00]))?.format, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("a.tar.br", bytes: [0x1B, 0x00]))?.writableFormat, .tar)
         // The compression needn't match the name: bsdtar recognizes it.
-        XCTAssertEqual(registry.extractor(for: try file("xz-inside.tar.gz", bytes: [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]))?.format, .tar)
-        XCTAssertEqual(registry.extractor(for: try file("x.zip", bytes: [0x50, 0x4B, 0x03, 0x04]))?.format, .zip)
+        XCTAssertEqual(registry.extractor(for: try file("xz-inside.tar.gz", bytes: [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]))?.writableFormat, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("x.zip", bytes: [0x50, 0x4B, 0x03, 0x04]))?.writableFormat, .zip)
     }
 
     func testTheNameDecidesWhatCountsAsAnArchive() throws {
@@ -87,19 +87,52 @@ final class ArchivePlannerTests: XCTestCase {
         for name in ["Report.docx", "Sheet.xlsx", "Book.epub", "Talk.key", "App.jar"] {
             XCTAssertNil(registry.extractor(for: try file(name, bytes: zipHeader)), name)
         }
-        // A lone compressed file may not hold a tar.
-        XCTAssertNil(registry.extractor(for: try file("dump.sql.zst", bytes: ArchiveDetector.zstdMagic)))
-        XCTAssertNil(registry.extractor(for: try file("dump.sql.gz", bytes: [0x1F, 0x8B, 8, 0])))
-        XCTAssertNil(registry.extractor(for: try file("page.html.br", bytes: [0x1B, 0x00])))
-        XCTAssertEqual(registry.extractor(for: try file("Logs.TZST", bytes: ArchiveDetector.zstdMagic))?.format, .tar)
+        // A lone compressed file is decompressed into the file it holds.
+        XCTAssertTrue(registry.extractor(for: try file("dump.sql.zst", bytes: ArchiveDetector.zstdMagic)) is CompressedFileEngine)
+        XCTAssertTrue(registry.extractor(for: try file("dump.sql.gz", bytes: [0x1F, 0x8B, 8, 0])) is CompressedFileEngine)
+        XCTAssertTrue(registry.extractor(for: try file("page.html.br", bytes: [0x1B, 0x00])) is CompressedFileEngine)
+        // ...when its first bytes agree with the name.
+        XCTAssertNil(registry.extractor(for: try file("notes.gz", bytes: Array("plain text".utf8))))
+        XCTAssertNil(registry.extractor(for: try file("zipped.br", bytes: zipHeader)))
+        XCTAssertEqual(registry.extractor(for: try file("Logs.TZST", bytes: ArchiveDetector.zstdMagic))?.writableFormat, .tar)
         // No extension: the first bytes decide.
-        XCTAssertEqual(registry.extractor(for: try file("download", bytes: zipHeader))?.format, .zip)
+        XCTAssertEqual(registry.extractor(for: try file("download", bytes: zipHeader))?.writableFormat, .zip)
         XCTAssertNil(registry.extractor(for: try file("stream", bytes: ArchiveDetector.zstdMagic)))
         XCTAssertNil(registry.extractor(for: try file("gzipped", bytes: [0x1F, 0x8B, 8, 0])))
         // An archive name with other contents isn't opened.
         XCTAssertNil(registry.extractor(for: try file("fake.zip", bytes: Array("hello".utf8))))
         // A misnamed archive opens with the engine its contents need.
-        XCTAssertEqual(registry.extractor(for: try file("really-a-tar.zip", bytes: tarHeader))?.format, .tar)
+        XCTAssertEqual(registry.extractor(for: try file("really-a-tar.zip", bytes: tarHeader))?.writableFormat, .tar)
+    }
+
+    func testReadOnlyFormatsNeedTheirNameAndSignature() throws {
+        func readOnly(_ name: String, _ bytes: [UInt8]) throws -> ReadOnlyFormat? {
+            (registry.extractor(for: try file(name, bytes: bytes)) as? ReadOnlyEngine)?.format
+        }
+        XCTAssertEqual(try readOnly("a.rar", Array("Rar!".utf8) + [0x1A, 0x07, 0x00, 0]), .rar)
+        XCTAssertEqual(try readOnly("b.part1.RAR", Array("Rar!".utf8) + [0x1A, 0x07, 0x01, 0x00]), .rar)
+        XCTAssertEqual(try readOnly("c.cab", Array("MSCF".utf8) + [0, 0, 0, 0, 1]), .cab)
+        XCTAssertEqual(try readOnly("d.cpio", Array("070701".utf8)), .cpio)
+        XCTAssertEqual(try readOnly("e.cpio", [0xC7, 0x71, 0]), .cpio)
+        var disc = [UInt8](repeating: 0, count: 32774)
+        disc.replaceSubrange(32769..<32774, with: Array("CD001".utf8))
+        XCTAssertEqual(try readOnly("f.iso", disc), .iso)
+        disc.replaceSubrange(32769..<32774, with: Array("BEA01".utf8))
+        XCTAssertEqual(try readOnly("g.iso", disc), .iso)
+        // The name without the signature, or the signature without the name, doesn't count.
+        XCTAssertNil(registry.extractor(for: try file("h.iso", bytes: [UInt8](repeating: 0, count: 40000))))
+        XCTAssertNil(registry.extractor(for: try file("i.rar", bytes: [0x50, 0x4B, 0x03, 0x04])))
+        XCTAssertNil(registry.extractor(for: try file("rar-inside", bytes: Array("Rar!".utf8) + [0x1A, 0x07, 0x00])))
+        XCTAssertEqual(ArchiveDetector.readOnlyFormat(ofName: URL(fileURLWithPath: "/a/Disk.ISO")), .iso)
+        XCTAssertNil(ArchiveDetector.readOnlyFormat(ofName: URL(fileURLWithPath: "/a/.rar")))
+    }
+
+    func testLoneCompressedFileNames() {
+        XCTAssertEqual(CompressedFileEngine.outputName(for: URL(fileURLWithPath: "/a/dump.sql.gz")), "dump.sql")
+        XCTAssertEqual(CompressedFileEngine.outputName(for: URL(fileURLWithPath: "/a/Log.TXT.ZST")), "Log.TXT")
+        XCTAssertEqual(CompressedFileEngine.outputName(for: URL(fileURLWithPath: "/a/data.lz4")), "data")
+        XCTAssertEqual(CompressedFileEngine.outputName(for: URL(fileURLWithPath: "/a/data.lz")), "data")
+        XCTAssertNil(CompressedFileEngine.suffix(of: URL(fileURLWithPath: "/a/.gz")))
     }
 
     func testFormatClaimedByTheName() {

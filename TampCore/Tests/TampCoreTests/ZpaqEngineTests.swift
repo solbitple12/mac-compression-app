@@ -120,7 +120,7 @@ final class ZpaqEngineTests: EngineTestCase {
     func testTheRegistryOpensZpaqFiles() async throws {
         let archive = try await compress([project], name: "Detect.zpaq", step: .fastest)
         XCTAssertEqual(ArchiveDetector.format(of: archive), .zpaq)
-        XCTAssertEqual(EngineRegistry.standard().extractor(for: archive)?.format, .zpaq)
+        XCTAssertEqual(EngineRegistry.standard().extractor(for: archive)?.writableFormat, .zpaq)
         XCTAssertTrue(ZpaqEngine.hasSignature(archive))
     }
 

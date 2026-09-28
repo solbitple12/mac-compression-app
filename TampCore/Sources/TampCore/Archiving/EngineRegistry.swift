@@ -4,17 +4,22 @@ import Foundation
 /// The format picker lists only `availableFormats`; more arrive with each phase.
 public struct EngineRegistry: Sendable {
     public let engines: [any ArchiveEngine]
+    /// Openers for formats Tamp doesn't write: `ReadOnlyEngine`s and a `CompressedFileEngine`.
+    public let extractors: [any ArchiveExtractor]
 
-    public init(engines: [any ArchiveEngine]) {
+    public init(engines: [any ArchiveEngine], extractors: [any ArchiveExtractor] = []) {
         self.engines = engines
+        self.extractors = extractors
     }
 
     public static func standard(helpers: HelperLocator = .standard) -> EngineRegistry {
         let tarFormats: [ArchiveFormat] = [.tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr]
         let archivers: [any ArchiveEngine] = [ZipEngine(helpers: helpers), SevenZipEngine(helpers: helpers)]
-        return EngineRegistry(engines: archivers
-            + tarFormats.map { TarEngine(format: $0, helpers: helpers) }
-            + [ZpaqEngine(helpers: helpers)])
+        let readOnly: [any ArchiveExtractor] = ReadOnlyFormat.allCases.map { ReadOnlyEngine(format: $0, helpers: helpers) }
+        return EngineRegistry(
+            engines: archivers + tarFormats.map { TarEngine(format: $0, helpers: helpers) } + [ZpaqEngine(helpers: helpers)],
+            extractors: readOnly + [CompressedFileEngine(helpers: helpers)]
+        )
     }
 
     /// Formats Tamp can write, in picker order.
@@ -26,15 +31,24 @@ public struct EngineRegistry: Sendable {
         engines.first { $0.format == format }
     }
 
-    /// The engine that opens `archive`, or nil if none can.
+    /// The extractor that opens `archive`, or nil if none can.
     ///
     /// The name decides whether a file counts as an archive, and its first bytes
     /// decide which engine opens it. Many documents are ZIP files inside (.docx,
-    /// .epub, .pages), and a lone "dump.sql.gz" holds no tar, so neither is extracted.
-    /// A file with no extension is judged by its first bytes alone, and only a ZIP
-    /// or a plain tar counts then.
-    public func extractor(for archive: URL) -> (any ArchiveEngine)? {
+    /// .epub, .pages), so they aren't extracted. A lone "dump.sql.gz" is
+    /// decompressed into "dump.sql". A file with no extension is judged by its
+    /// first bytes alone, and only a ZIP, 7Z, ZPAQ or plain tar counts then.
+    public func extractor(for archive: URL) -> (any ArchiveExtractor)? {
+        if let readOnly = ArchiveDetector.readOnlyFormat(ofName: archive) {
+            return ArchiveDetector.readOnlyFormat(of: archive) == readOnly ? readOnlyExtractor(for: readOnly) : nil
+        }
         let named = ArchiveDetector.format(ofName: archive)
+        if named == nil, let suffix = CompressedFileEngine.suffix(of: archive) {
+            let detected = ArchiveDetector.format(of: archive)
+            // Brotli streams have no signature, so the name alone counts.
+            let compressed = detected?.isCompressedTar == true || (suffix == ".br" && detected == nil)
+            return compressed ? extractors.first { $0 is CompressedFileEngine } : nil
+        }
         guard named != nil || archive.pathExtension.isEmpty else { return nil }
         switch ArchiveDetector.format(of: archive) {
         case .zip:
@@ -58,6 +72,10 @@ public struct EngineRegistry: Sendable {
         default:
             return nil
         }
+    }
+
+    private func readOnlyExtractor(for format: ReadOnlyFormat) -> (any ArchiveExtractor)? {
+        extractors.first { ($0 as? ReadOnlyEngine)?.format == format }
     }
 
     /// Every TAR-family engine opens every TAR-family archive.
@@ -103,6 +121,42 @@ public enum ArchiveDetector {
         (".7z", .sevenZip),
         (".zpaq", .zpaq),
     ]
+
+    static let readOnlySuffixes: [(suffix: String, format: ReadOnlyFormat)] = [
+        (".rar", .rar), (".cab", .cab), (".iso", .iso), (".cpio", .cpio),
+    ]
+    static let rarSignatures: [[UInt8]] = [
+        Array("Rar!".utf8) + [0x1A, 0x07, 0x00], // RAR 1.5 to 4
+        Array("Rar!".utf8) + [0x1A, 0x07, 0x01, 0x00], // RAR 5
+    ]
+    static let cabSignature: [UInt8] = Array("MSCF".utf8) + [0, 0, 0, 0]
+    static let cpioSignatures: [[UInt8]] = [
+        Array("070701".utf8), Array("070702".utf8), Array("070707".utf8), // ASCII headers
+        [0xC7, 0x71], [0x71, 0xC7], // old binary headers, either byte order
+    ]
+    /// Discs mark their first volume descriptor at 32769: "CD001" for ISO 9660, "BEA01" for UDF.
+    static let discMarkerOffset = 32769
+    static let discMarkers = [Array("CD001".utf8), Array("BEA01".utf8)]
+
+    /// The read-only format a file name claims, such as `.iso` for "Disk.ISO".
+    public static func readOnlyFormat(ofName url: URL) -> ReadOnlyFormat? {
+        let name = url.lastPathComponent.lowercased()
+        return readOnlySuffixes.first { name.hasSuffix($0.suffix) && name.count > $0.suffix.count }?.format
+    }
+
+    /// The read-only format whose signature the file starts with, or nil.
+    public static func readOnlyFormat(of url: URL) -> ReadOnlyFormat? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: discMarkerOffset + 5) else { return nil }
+        let bytes = Array(data)
+        if rarSignatures.contains(where: { bytes.starts(with: $0) }) { return .rar }
+        if bytes.starts(with: cabSignature) { return .cab }
+        if cpioSignatures.contains(where: { bytes.starts(with: $0) }) { return .cpio }
+        if bytes.count >= discMarkerOffset + 5,
+           discMarkers.contains(Array(bytes[discMarkerOffset..<(discMarkerOffset + 5)])) { return .iso }
+        return nil
+    }
 
     /// The archive format a file name claims, such as `.tarGz` for "x.tar.gz" or "x.tgz".
     public static func format(ofName url: URL) -> ArchiveFormat? {

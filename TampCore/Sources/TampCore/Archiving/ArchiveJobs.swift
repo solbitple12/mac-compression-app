@@ -30,7 +30,7 @@ public enum ArchiveJobs {
     @discardableResult
     public static func extract(
         _ request: ExtractRequest,
-        engine: any ArchiveEngine,
+        engine: any ArchiveExtractor,
         on queue: JobQueue,
         willWrite: OutputFolderHandler? = nil
     ) async -> JobID {
