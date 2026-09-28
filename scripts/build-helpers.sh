@@ -480,12 +480,23 @@ build_mozjpeg() {
     # refuses to honor at all; this just accepts the old policies rather than the
     # (removed) old behavior itself, which is fine for a plain C build like this one.
     cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
-      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_TESTING=OFF \
       -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_JPEG8=1 -DPNG_SUPPORTED=OFF -DWITH_TURBOJPEG=OFF >/dev/null
-    cmake --build "$dir/out-$arch" -j"$JOBS" --target cjpeg djpeg jpegtran >/dev/null
-    cjpeg_slices+=("$dir/out-$arch/cjpeg")
-    djpeg_slices+=("$dir/out-$arch/djpeg")
-    jpegtran_slices+=("$dir/out-$arch/jpegtran")
+    # --target cjpeg/djpeg/jpegtran isn't a target CMake's Makefile generator
+    # recognizes here; build everything and find the three tools afterward instead
+    # of guessing its exact target and output layout.
+    cmake --build "$dir/out-$arch" -j"$JOBS" >/dev/null
+    local cjpeg_binary djpeg_binary jpegtran_binary
+    cjpeg_binary="$(find "$dir/out-$arch" -type f -name cjpeg -perm +111 | head -1)"
+    djpeg_binary="$(find "$dir/out-$arch" -type f -name djpeg -perm +111 | head -1)"
+    jpegtran_binary="$(find "$dir/out-$arch" -type f -name jpegtran -perm +111 | head -1)"
+    if [[ -z "$cjpeg_binary" || -z "$djpeg_binary" || -z "$jpegtran_binary" ]]; then
+      echo "mozjpeg built for $arch but cjpeg/djpeg/jpegtran weren't found under $dir/out-$arch" >&2
+      exit 1
+    fi
+    cjpeg_slices+=("$cjpeg_binary")
+    djpeg_slices+=("$djpeg_binary")
+    jpegtran_slices+=("$jpegtran_binary")
   done
   lipo -create -output "$BIN/cjpeg" "${cjpeg_slices[@]}"
   lipo -create -output "$BIN/djpeg" "${djpeg_slices[@]}"
