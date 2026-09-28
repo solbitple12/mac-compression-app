@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import ImageIO
 import XCTest
@@ -156,5 +157,19 @@ class EngineTestCase: XCTestCase {
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
         return buffer
+    }
+
+    /// Every sample of an audio file's first channel, as Float, for a lossless
+    /// engine's round-trip tests to compare exactly.
+    func audioSamples(of url: URL) throws -> [Float] {
+        let file = try AVAudioFile(forReading: url)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
+            throw TampError.other("couldn't allocate a buffer for \(url.lastPathComponent)")
+        }
+        try file.read(into: buffer)
+        guard let data = buffer.floatChannelData else {
+            throw TampError.other("\(url.lastPathComponent) has no float channel data")
+        }
+        return Array(UnsafeBufferPointer(start: data[0], count: Int(buffer.frameLength)))
     }
 }

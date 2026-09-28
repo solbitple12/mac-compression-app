@@ -6,7 +6,7 @@
 # suite's independent WavPack round-trip check; it's never bundled into the app,
 # since Tamp only ever writes WavPack, never opens one.
 # shellcheck disable=SC2034
-TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac wavpack)
+TAMP_HELPERS=(7zz bsdtar bsdcat zstd xz pigz pbzip2 brotli zpaq minizip oxipng cjpeg djpeg jpegtran cwebp flac wavpack lame)
 
 # shellcheck disable=SC2034
 TAMP_LICENSES=(
@@ -25,4 +25,5 @@ TAMP_LICENSES=(
   libwebp.txt
   flac.txt
   wavpack.txt
+  lame.txt
 )

@@ -482,16 +482,16 @@ build_mozjpeg() {
     cmake -S "$dir" -B "$dir/out-$arch" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
       -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_TESTING=OFF \
       -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_JPEG8=1 -DPNG_SUPPORTED=OFF -DWITH_TURBOJPEG=OFF >/dev/null
-    # --target cjpeg/djpeg/jpegtran isn't a target CMake's Makefile generator
-    # recognizes here; build everything and find the three tools afterward instead
-    # of guessing its exact target and output layout.
-    cmake --build "$dir/out-$arch" -j"$JOBS" >/dev/null
+    # With ENABLE_SHARED off, its CMakeLists names the executable targets (and the
+    # binaries themselves; there's no OUTPUT_NAME override) cjpeg-static and so on,
+    # not the plain names --target cjpeg guessed at.
+    cmake --build "$dir/out-$arch" -j"$JOBS" --target cjpeg-static djpeg-static jpegtran-static >/dev/null
     local cjpeg_binary djpeg_binary jpegtran_binary
-    cjpeg_binary="$(find "$dir/out-$arch" -type f -name cjpeg -perm +111 | head -1)"
-    djpeg_binary="$(find "$dir/out-$arch" -type f -name djpeg -perm +111 | head -1)"
-    jpegtran_binary="$(find "$dir/out-$arch" -type f -name jpegtran -perm +111 | head -1)"
+    cjpeg_binary="$(find "$dir/out-$arch" -type f -name cjpeg-static -perm +111 | head -1)"
+    djpeg_binary="$(find "$dir/out-$arch" -type f -name djpeg-static -perm +111 | head -1)"
+    jpegtran_binary="$(find "$dir/out-$arch" -type f -name jpegtran-static -perm +111 | head -1)"
     if [[ -z "$cjpeg_binary" || -z "$djpeg_binary" || -z "$jpegtran_binary" ]]; then
-      echo "mozjpeg built for $arch but cjpeg/djpeg/jpegtran weren't found under $dir/out-$arch" >&2
+      echo "mozjpeg built for $arch but cjpeg-static/djpeg-static/jpegtran-static weren't found under $dir/out-$arch" >&2
       exit 1
     fi
     cjpeg_slices+=("$cjpeg_binary")
@@ -568,6 +568,36 @@ build_wavpack() {
   stamp wvunpack "$WAVPACK_VERSION"
 }
 
+# The lame CLI, for MP3. Autotools like xz and bsdtar above, so the same
+# configure-per-architecture-then-lipo shape, rather than mozjpeg's CMake dance.
+build_lame() {
+  built lame "$LAME_VERSION" && return
+  local tarball="$SRC/lame-$LAME_VERSION.tar.gz"
+  local dir="$SRC/lame-$LAME_VERSION"
+  fetch "$LAME_URL" "$LAME_SHA256" "$tarball"
+  rm -rf "$dir"
+  tar -xzf "$tarball" -C "$SRC"
+  local slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building lame $LAME_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    mkdir -p "$dir/build-$arch"
+    (
+      cd "$dir/build-$arch"
+      # --disable-nasm: its x86 assembly won't build for arm64 anyway, and this
+      # keeps both architectures on the same portable-C code path.
+      CC="clang -arch $arch" CFLAGS="-O2" ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
+        --disable-shared --enable-static --disable-nasm >/dev/null
+      make -j"$JOBS" >/dev/null
+      make install >/dev/null
+    )
+    slices+=("$prefix/bin/lame")
+  done
+  lipo -create -output "$BIN/lame" "${slices[@]}"
+  cp "$dir/COPYING" "$LICENSES/lame.txt"
+  stamp lame "$LAME_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -582,3 +612,4 @@ build_mozjpeg
 build_libwebp
 build_flac
 build_wavpack
+build_lame
