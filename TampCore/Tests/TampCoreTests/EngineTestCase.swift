@@ -1,3 +1,5 @@
+import CoreGraphics
+import ImageIO
 import XCTest
 @testable import TampCore
 
@@ -134,5 +136,25 @@ class EngineTestCase: XCTestCase {
                       "empty folder is missing", file: file, line: line)
         XCTAssertFalse(fileManager.fileExists(atPath: extracted.appendingPathComponent(".DS_Store").path), file: file, line: line)
         XCTAssertFalse(fileManager.fileExists(atPath: extracted.appendingPathComponent("._readme.txt").path), file: file, line: line)
+    }
+
+    /// Draws an image into a fixed RGBA buffer, so an image engine's round-trip
+    /// tests compare decoded pixels rather than the compressed bytes an engine is
+    /// free to rearrange or, for JPEG, re-entropy-code.
+    func decodedPixels(of url: URL) throws -> Data {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw TampError.other("couldn't decode \(url.lastPathComponent)")
+        }
+        let width = image.width, height = image.height
+        var buffer = Data(count: width * height * 4)
+        try buffer.withUnsafeMutableBytes { raw in
+            guard let context = CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { throw TampError.other("couldn't create a bitmap context") }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        return buffer
     }
 }

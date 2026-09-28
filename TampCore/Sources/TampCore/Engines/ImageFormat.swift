@@ -34,11 +34,13 @@ public enum ImageFormat: String, CaseIterable, Codable, Sendable {
     }
 
     /// Whether this format can hold a lossless encode, so the batch panel offers
-    /// the choice. JPEG re-encodes only lossy, except through
-    /// `losslessJPEGToJXL`, which is JXL's lossless path, not this one.
+    /// the choice. JPEG's lossless path (mozjpeg's jpegtran) only rewrites the
+    /// Huffman tables for a smaller file; it's not a general "re-encode losslessly
+    /// from any pixels" the way PNG, WebP and JXL are. `losslessJPEGToJXL` is a
+    /// separate, third kind of lossless: JPEG's DCT coefficients rewrapped as JXL.
     public var supportsLossless: Bool {
         switch self {
-        case .png, .webp, .jxl: true
+        case .jpeg, .png, .webp, .jxl: true
         default: false
         }
     }

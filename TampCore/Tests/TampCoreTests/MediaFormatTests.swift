@@ -33,7 +33,7 @@ final class MediaFormatTests: XCTestCase {
     }
 
     func testFormatsThatSupportLosslessImageEncoding() {
-        let expected: Set<ImageFormat> = [.png, .webp, .jxl]
+        let expected: Set<ImageFormat> = [.jpeg, .png, .webp, .jxl]
         for format in ImageFormat.allCases {
             XCTAssertEqual(format.supportsLossless, expected.contains(format))
         }

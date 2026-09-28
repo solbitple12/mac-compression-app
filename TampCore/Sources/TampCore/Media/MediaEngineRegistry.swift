@@ -14,7 +14,7 @@ public struct MediaEngineRegistry: Sendable {
 
     /// More image and audio engines arrive one at a time through Phase 3.
     public static func standard(helpers: HelperLocator = .standard) -> MediaEngineRegistry {
-        MediaEngineRegistry(imageEngines: [OxipngEngine(helpers: helpers)])
+        MediaEngineRegistry(imageEngines: [OxipngEngine(helpers: helpers), MozjpegEngine(helpers: helpers)])
     }
 
     public var availableImageFormats: [ImageFormat] {

@@ -462,6 +462,27 @@ build_oxipng() {
   stamp oxipng "$OXIPNG_VERSION"
 }
 
+# mozjpeg for JPEG: cjpeg and djpeg for the lossy path (decode to pixels, re-encode
+# at a chosen quality), jpegtran for the lossless path (Huffman tables only).
+build_mozjpeg() {
+  if built cjpeg "$MOZJPEG_VERSION" && built djpeg "$MOZJPEG_VERSION" && built jpegtran "$MOZJPEG_VERSION"; then
+    return
+  fi
+  local dir="$SRC/mozjpeg-$MOZJPEG_VERSION"
+  fetch_git "$MOZJPEG_GIT" "v$MOZJPEG_VERSION" "$MOZJPEG_COMMIT" "$dir"
+  echo "Building mozjpeg $MOZJPEG_VERSION"
+  cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" \
+    -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_JPEG8=1 -DPNG_SUPPORTED=OFF -DWITH_TURBOJPEG=OFF >/dev/null
+  cmake --build "$dir/out" -j"$JOBS" --target cjpeg djpeg jpegtran >/dev/null
+  cp "$dir/out/cjpeg" "$BIN/cjpeg"
+  cp "$dir/out/djpeg" "$BIN/djpeg"
+  cp "$dir/out/jpegtran" "$BIN/jpegtran"
+  cp "$dir/LICENSE.md" "$LICENSES/mozjpeg.txt"
+  stamp cjpeg "$MOZJPEG_VERSION"
+  stamp djpeg "$MOZJPEG_VERSION"
+  stamp jpegtran "$MOZJPEG_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -472,3 +493,4 @@ build_brotli
 build_zpaq
 build_minizip
 build_oxipng
+build_mozjpeg
