@@ -54,6 +54,9 @@ jobs:
             codesign --verify --strict "$app/Contents/Helpers/$tool"
           done
           ls "$app/Contents/Resources/Licenses"
+          for license in 7-Zip.txt 7-Zip-unRAR.txt zstd.txt libarchive.txt; do
+            test -s "$app/Contents/Resources/Licenses/$license"
+          done
           codesign --verify --deep --strict --verbose=2 "$app"
       - name: Launch Tamp
         run: |

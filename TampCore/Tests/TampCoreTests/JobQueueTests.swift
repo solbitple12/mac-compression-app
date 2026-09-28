@@ -75,6 +75,47 @@ final class JobQueueTests: XCTestCase {
         XCTAssertEqual(seen.progress?.estimatedTimeRemaining ?? -1, 9, accuracy: 1e-6)
     }
 
+    func testTotalMeasuredAfterStartKeepsTheStartTime() async {
+        let clock = TestClock()
+        let queue = JobQueue(clock: { clock.now })
+        let seen = ProgressRecorder()
+        let id = await queue.enqueue(title: "Sized later", totalBytes: 0) { context in
+            clock.now = 2
+            await context.setTotalBytes(100_000_000)
+            clock.now = 4
+            await context.reportProgress(bytesProcessed: 20_000_000)
+            if case let .running(progress) = await queue.snapshot(of: context.id)?.state {
+                seen.progress = progress
+            }
+        }
+        _ = await queue.waitUntilDone(id)
+        XCTAssertEqual(seen.progress?.totalBytes, 100_000_000)
+        XCTAssertEqual(seen.progress?.elapsed ?? 0, 4, accuracy: 1e-6)
+        XCTAssertEqual(seen.progress?.fractionCompleted ?? 0, 0.2, accuracy: 1e-6)
+    }
+
+    func testShutDownStopsEverythingAndRefusesNewJobs() async {
+        let queue = JobQueue(maxConcurrentJobs: 1)
+        let (started, signal) = AsyncStream<Void>.makeStream()
+        let events = LineRecorder()
+        let running = await queue.enqueue(title: "Running", totalBytes: 0) { _ in
+            signal.yield()
+            try await Task.sleep(for: .seconds(30))
+        }
+        let waiting = await queue.enqueue(title: "Waiting", totalBytes: 0) { _ in events.append("waiting ran") }
+        for await _ in started { break }
+        await queue.shutDown()
+        let runningState = await queue.snapshot(of: running)?.state
+        let waitingState = await queue.snapshot(of: waiting)?.state
+        XCTAssertEqual(runningState, .cancelled)
+        XCTAssertEqual(waitingState, .cancelled)
+        let late = await queue.enqueue(title: "Late", totalBytes: 0) { _ in events.append("late ran") }
+        let lateState = await queue.snapshot(of: late)?.state
+        XCTAssertEqual(lateState, .cancelled)
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(events.all, [])
+    }
+
     func testUpdatesStreamPublishesStateChanges() async {
         let queue = JobQueue()
         let updates = await queue.updates()

@@ -55,16 +55,44 @@ final class ArchivePlannerTests: XCTestCase {
         XCTAssertEqual(registry.extractor(for: try file("x.zip", bytes: [0x50, 0x4B, 0x03, 0x04]))?.format, .zip)
     }
 
+    func testTheNameDecidesWhatCountsAsAnArchive() throws {
+        let zipHeader: [UInt8] = [0x50, 0x4B, 0x03, 0x04, 0, 0]
+        // Documents that are ZIP files inside are compressed, not taken apart.
+        for name in ["Report.docx", "Sheet.xlsx", "Book.epub", "Talk.key", "App.jar"] {
+            XCTAssertNil(registry.extractor(for: try file(name, bytes: zipHeader)), name)
+        }
+        // A lone .zst may not hold a tar.
+        XCTAssertNil(registry.extractor(for: try file("dump.sql.zst", bytes: TarZstEngine.zstdMagic)))
+        XCTAssertEqual(registry.extractor(for: try file("Logs.TZST", bytes: TarZstEngine.zstdMagic))?.format, .tarZst)
+        // No extension: the first bytes decide.
+        XCTAssertEqual(registry.extractor(for: try file("download", bytes: zipHeader))?.format, .zip)
+        XCTAssertNil(registry.extractor(for: try file("stream", bytes: TarZstEngine.zstdMagic)))
+        // An archive name with other contents isn't opened.
+        XCTAssertNil(registry.extractor(for: try file("fake.zip", bytes: Array("hello".utf8))))
+        // A misnamed archive opens with the engine its contents need.
+        XCTAssertEqual(registry.extractor(for: try file("really-a-tar.zip", bytes: tarHeader))?.format, .tarZst)
+    }
+
+    func testFormatClaimedByTheName() {
+        XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/B.ZIP")), .zip)
+        XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.tar")), .tar)
+        XCTAssertEqual(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.tar.zst")), .tarZst)
+        XCTAssertNil(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.zst")))
+        XCTAssertNil(ArchiveDetector.format(ofName: URL(fileURLWithPath: "/a/b.docx")))
+    }
+
     func testArchivesAreExtractedAndEverythingElseCompressed() throws {
         let zip = try file("One.zip", bytes: [0x50, 0x4B, 0x03, 0x04])
         let zst = try file("Two.tar.zst", bytes: TarZstEngine.zstdMagic)
         let text = try file("notes.txt", bytes: Array("notes".utf8))
+        let document = try file("Report.docx", bytes: [0x50, 0x4B, 0x03, 0x04])
         let subfolder = folder.appendingPathComponent("Photos")
         try fileManager.createDirectory(at: subfolder, withIntermediateDirectories: false)
 
         XCTAssertEqual(ArchivePlanner.action(for: [zip, zst], registry: registry), .extract([zip, zst]))
         XCTAssertEqual(ArchivePlanner.action(for: [zip, text], registry: registry), .compress([zip, text]))
         XCTAssertEqual(ArchivePlanner.action(for: [subfolder], registry: registry), .compress([subfolder]))
+        XCTAssertEqual(ArchivePlanner.action(for: [document], registry: registry), .compress([document]))
         XCTAssertEqual(ArchivePlanner.action(for: [], registry: registry), .compress([]))
     }
 

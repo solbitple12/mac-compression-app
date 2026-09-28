@@ -9,7 +9,7 @@ public enum DropAction: Equatable, Sendable {
 }
 
 public enum ArchivePlanner {
-    /// Archives Tamp can open are extracted, as in Finder and Keka. Anything else,
+    /// Archives Tamp can open (see `EngineRegistry.extractor`) are extracted. Anything else,
     /// or a mix of archives and other items, is compressed together.
     public static func action(for items: [URL], registry: EngineRegistry) -> DropAction {
         let allOpenable = !items.isEmpty && items.allSatisfy { item in

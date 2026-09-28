@@ -48,6 +48,12 @@ public final class JobContext: Sendable {
         await queue.recordProgress(id, bytesProcessed: bytesProcessed)
     }
 
+    /// Sets the input size once the job has measured it, for jobs enqueued before
+    /// their size was known. Progress reported afterwards is measured against it.
+    public func setTotalBytes(_ totalBytes: Int64) async {
+        await queue.updateTotalBytes(id, totalBytes: totalBytes)
+    }
+
     /// Records what the job produced; published with the job's next state change.
     public func reportOutput(_ url: URL) async {
         await queue.recordOutput(id, url: url)
@@ -67,6 +73,7 @@ public actor JobQueue {
         var initialEstimate: TimeInterval?
         var work: Work
         var tracker: ThroughputTracker?
+        var startTime: TimeInterval?
         var task: Task<Void, Never>?
     }
 
@@ -76,6 +83,7 @@ public actor JobQueue {
     private var order: [JobID] = []
     private var pending: [JobID] = []
     private var runningCount = 0
+    private var isShutDown = false
     private var observers: [UUID: AsyncStream<JobSnapshot>.Continuation] = [:]
     private var waiters: [JobID: [CheckedContinuation<JobSnapshot, Never>]] = [:]
 
@@ -100,14 +108,16 @@ public actor JobQueue {
     ) -> JobID {
         let id = JobID()
         entries[id] = Entry(
-            snapshot: JobSnapshot(id: id, title: title, state: .queued),
+            snapshot: JobSnapshot(id: id, title: title, state: isShutDown ? .cancelled : .queued),
             totalBytes: totalBytes,
             initialEstimate: initialEstimate,
             work: work
         )
         order.append(id)
-        pending.append(id)
         publish(id)
+        // After shutdown a job is recorded as cancelled and never runs.
+        guard !isShutDown else { return id }
+        pending.append(id)
         startNextJobs()
         return id
     }
@@ -124,6 +134,16 @@ public actor JobQueue {
 
     public func cancelAll() {
         for id in order { cancel(id) }
+    }
+
+    /// For quitting: cancels every job, refuses new ones, and returns once every
+    /// running job has stopped and removed its partial output.
+    public func shutDown() async {
+        isShutDown = true
+        cancelAll()
+        for id in order where entries[id]?.snapshot.state.isFinal == false {
+            _ = await waitUntilDone(id)
+        }
     }
 
     /// Forgets jobs that have finished, failed or been cancelled.
@@ -171,6 +191,13 @@ public actor JobQueue {
         publish(id)
     }
 
+    func updateTotalBytes(_ id: JobID, totalBytes: Int64) {
+        guard var entry = entries[id], case .running = entry.snapshot.state, let startTime = entry.startTime else { return }
+        entry.totalBytes = max(0, totalBytes)
+        entry.tracker = ThroughputTracker(totalBytes: entry.totalBytes, startTime: startTime, initialEstimate: entry.initialEstimate)
+        entries[id] = entry
+    }
+
     func recordOutput(_ id: JobID, url: URL) {
         guard entries[id]?.snapshot.state.isFinal == false else { return }
         entries[id]?.snapshot.output = url
@@ -185,9 +212,11 @@ public actor JobQueue {
             let id = pending.removeFirst()
             guard var entry = entries[id] else { continue }
             runningCount += 1
+            let startTime = clock()
+            entry.startTime = startTime
             entry.tracker = ThroughputTracker(
                 totalBytes: entry.totalBytes,
-                startTime: clock(),
+                startTime: startTime,
                 initialEstimate: entry.initialEstimate
             )
             entry.snapshot.state = .running(nil)

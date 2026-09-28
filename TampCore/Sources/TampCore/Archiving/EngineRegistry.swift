@@ -22,13 +22,21 @@ public struct EngineRegistry: Sendable {
         engines.first { $0.format == format }
     }
 
-    /// The engine that opens `archive`, judged by its first bytes, or nil if none can.
+    /// The engine that opens `archive`, or nil if none can.
+    ///
+    /// The name decides whether a file counts as an archive, and its first bytes
+    /// decide which engine opens it. Many documents are ZIP files inside (.docx,
+    /// .epub, .pages), and a lone .zst may not hold a tar, so neither is extracted.
+    /// A file with no extension is judged by its first bytes alone.
     public func extractor(for archive: URL) -> (any ArchiveEngine)? {
+        let named = ArchiveDetector.format(ofName: archive)
+        guard named != nil || archive.pathExtension.isEmpty else { return nil }
         switch ArchiveDetector.format(of: archive) {
-        case .zip: engine(for: .zip)
+        case .zip: return engine(for: .zip)
         // The TAR.ZST engine also opens plain tar files.
-        case .tarZst, .tar: engine(for: .tarZst)
-        default: nil
+        case .tar: return engine(for: .tarZst)
+        case .tarZst where named == .tarZst: return engine(for: .tarZst)
+        default: return nil
         }
     }
 }
@@ -43,6 +51,17 @@ public enum ArchiveDetector {
     /// POSIX and GNU tar headers carry "ustar" at offset 257.
     static let tarMagicOffset = 257
     static let tarMagic = Array("ustar".utf8)
+
+    /// The archive format a file name claims: ".zip", ".tar", ".tar.zst" or ".tzst".
+    public static func format(ofName url: URL) -> ArchiveFormat? {
+        let name = url.lastPathComponent.lowercased()
+        if name.hasSuffix(".tar.zst") || name.hasSuffix(".tzst") { return .tarZst }
+        switch url.pathExtension.lowercased() {
+        case "zip": return .zip
+        case "tar": return .tar
+        default: return nil
+        }
+    }
 
     /// - Returns: `.zip`, `.tarZst` for any zstd stream, `.tar`, or nil.
     public static func format(of url: URL) -> ArchiveFormat? {

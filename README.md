@@ -72,6 +72,8 @@ Memory figures in the slider hint are approximations until the Phase 2a benchmar
 
 - ZIP extraction fails on a symlink whose target starts with `../`, even when it
   stays inside the archive: 7-Zip rejects such links as unsafe. TAR.ZST keeps them.
+- If two copies of Tamp run at once, the one launched second can remove the other's
+  unfinished output while cleaning up after crashes.
 
 ## Bundled components and licenses
 

@@ -65,6 +65,7 @@ struct DropZone: View {
 
     private var summary: String {
         let names = ArchivePlanner.displayName(for: model.pendingItems)
+        if model.isCheckingItems { return "Checking \(names)…" }
         return isExtracting ? "Ready to extract \(names)" : "Ready to compress \(names)"
     }
 }

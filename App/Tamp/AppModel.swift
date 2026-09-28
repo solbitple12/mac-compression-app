@@ -12,15 +12,19 @@ final class AppModel {
     private(set) var choice: ArchiveChoice
     /// Dropped or chosen, not yet started.
     private(set) var pendingItems: [URL] = []
-    /// What the start button will do with the pending items, or nil when there are none.
-    /// Worked out when the items change, since it reads each file's first bytes.
+    /// What the start button will do with the pending items. Nil while there are
+    /// none, and while Tamp is still checking them (`isCheckingItems`).
     private(set) var pendingAction: DropAction?
+    private(set) var isCheckingItems = false
     /// Every job since launch, oldest first, until "Clear Finished".
     private(set) var jobs: [JobSnapshot] = []
 
     private let settings: SettingsStore
     private let queue: JobQueue
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
+    @ObservationIgnored private var cleanupTask: Task<Void, Never>?
+    /// Bumped whenever the pending items change, so a check that finishes late is ignored.
+    @ObservationIgnored private var checkGeneration = 0
 
     init(registry: EngineRegistry = .standard(), settings: SettingsStore = SettingsStore()) {
         self.registry = registry
@@ -54,12 +58,38 @@ final class AppModel {
             let item = url.standardizedFileURL
             if !pendingItems.contains(item) { pendingItems.append(item) }
         }
-        pendingAction = pendingItems.isEmpty ? nil : ArchivePlanner.action(for: pendingItems, registry: registry)
+        checkPendingItems()
     }
 
     func clearPendingItems() {
         pendingItems = []
+        checkPendingItems()
+    }
+
+    /// Works out whether the items are archives to extract, off the main thread:
+    /// that reads each archive's first bytes, which can stall on a file iCloud
+    /// has yet to download or on a slow network share.
+    private func checkPendingItems() {
+        checkGeneration += 1
         pendingAction = nil
+        guard !pendingItems.isEmpty else {
+            isCheckingItems = false
+            return
+        }
+        isCheckingItems = true
+        let generation = checkGeneration
+        let items = pendingItems
+        let registry = registry
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let action = ArchivePlanner.action(for: items, registry: registry)
+            await self?.finishCheck(action, generation: generation)
+        }
+    }
+
+    private func finishCheck(_ action: DropAction, generation: Int) {
+        guard generation == checkGeneration else { return }
+        pendingAction = action
+        isCheckingItems = false
     }
 
     func chooseFiles() {
@@ -81,23 +111,30 @@ final class AppModel {
         guard let action = pendingAction else { return }
         clearPendingItems()
         let queue = queue
-        switch action {
-        case let .compress(items):
-            guard let engine = registry.engine(for: choice.format) else { return }
-            let request = CompressRequest(
-                items: items,
-                destination: ArchivePlanner.destination(for: items, format: choice.format),
-                step: choice.step
-            )
-            // Noted before the job runs, so a crash mid-job still gets its partial file cleaned up.
-            settings.noteOutputDirectory(request.destination.deletingLastPathComponent())
-            Task { await ArchiveJobs.compress(request, engine: engine, on: queue) }
-        case let .extract(archives):
-            for archive in archives {
-                guard let engine = registry.extractor(for: archive) else { continue }
-                let request = ExtractRequest(archive: archive, destinationDirectory: archive.deletingLastPathComponent())
-                settings.noteOutputDirectory(request.destinationDirectory)
-                Task { await ArchiveJobs.extract(request, engine: engine, on: queue) }
+        let registry = registry
+        let choice = choice
+        let cleanup = cleanupTask
+        let settings = settings
+        let willWrite: ArchiveJobs.OutputFolderHandler = { folder in settings.noteOutputDirectory(folder) }
+        Task.detached(priority: .userInitiated) {
+            // Launch cleanup must not delete the partial file of a job started right after launch.
+            await cleanup?.value
+            switch action {
+            case let .compress(items):
+                guard let engine = registry.engine(for: choice.format) else { return }
+                let request = CompressRequest(
+                    items: items,
+                    destination: ArchivePlanner.destination(for: items, format: choice.format),
+                    step: choice.step
+                )
+                await ArchiveJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
+            case let .extract(archives):
+                // One at a time, so the jobs run in the order the archives were dropped.
+                for archive in archives {
+                    guard let engine = registry.extractor(for: archive) else { continue }
+                    let request = ExtractRequest(archive: archive, destinationDirectory: archive.deletingLastPathComponent())
+                    await ArchiveJobs.extract(request, engine: engine, on: queue, willWrite: willWrite)
+                }
             }
         }
     }
@@ -123,22 +160,21 @@ final class AppModel {
         Task { await queue.removeFinishedJobs() }
     }
 
-    /// Cancels every job and returns once each helper has stopped and its partial output is gone.
+    /// For quitting: stops every job, refuses new ones, and returns once each
+    /// helper has stopped and its partial output is gone.
     func stopAllJobs() async {
-        await queue.cancelAll()
-        for job in await queue.snapshots where !job.state.isFinal {
-            _ = await queue.waitUntilDone(job.id)
-        }
+        await queue.shutDown()
     }
 
     func showInFinder(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    /// Deletes hidden partial files that a crash or forced quit left in recent output folders.
+    /// Deletes hidden partial files that a crash or forced quit left in recent
+    /// output folders. Jobs started meanwhile wait for it (see `start()`).
     func removeStalePartialFiles() {
         let directories = settings.recentOutputDirectories
-        Task.detached(priority: .utility) {
+        cleanupTask = Task.detached(priority: .utility) {
             for directory in directories {
                 SafeOutput.removeStalePartials(in: directory)
             }
@@ -158,6 +194,7 @@ final class AppModel {
         if let index = jobs.firstIndex(where: { $0.id == snapshot.id }) {
             jobs[index] = snapshot
         } else {
+            // A job publishes nothing after its final state, so a cleared job never comes back.
             jobs.append(snapshot)
         }
     }
