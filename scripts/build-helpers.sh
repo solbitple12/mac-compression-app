@@ -905,6 +905,11 @@ build_opus() {
   mkdir -p "$DEPS/include" "$DEPS/lib/pkgconfig"
   cp -R "$dir/install-arm64/include/." "$DEPS/include/"
   cp "$dir"/install-arm64/lib/pkgconfig/*.pc "$DEPS/lib/pkgconfig/"
+  # The copied .pc's prefix/libdir are baked to the arm64-only install-arm64
+  # directory at configure time; rewrite them to $DEPS, which holds the
+  # lipo'd universal library, so dependents (libopusenc etc.) link the
+  # right architecture instead of always pulling in the arm64 slice.
+  sed -i '' "s|^prefix=.*|prefix=$DEPS|; s|^libdir=.*|libdir=\${prefix}/lib|; s|^includedir=.*|includedir=\${prefix}/include|" "$DEPS/lib/pkgconfig"/*.pc
   lipo -create -output "$DEPS/lib/libopus.a" "${libs[@]}"
   cp "$dir/COPYING" "$LICENSES/opus.txt"
   touch "$stamp"
@@ -940,6 +945,10 @@ build_libopusenc() {
   mkdir -p "$DEPS/include" "$DEPS/lib/pkgconfig"
   cp -R "$dir/install-arm64/include/." "$DEPS/include/"
   cp "$dir"/install-arm64/lib/pkgconfig/*.pc "$DEPS/lib/pkgconfig/"
+  # The copied .pc's prefix/libdir/includedir are baked to the arm64-only
+  # install-arm64 prefix at configure time; rewrite to $DEPS so opus-tools'
+  # x86_64 build (which reads these via pkg-config) links the right slice.
+  sed -i '' "s|^prefix=.*|prefix=$DEPS|; s|^libdir=.*|libdir=\${prefix}/lib|; s|^includedir=.*|includedir=\${prefix}/include|" "$DEPS/lib/pkgconfig"/libopusenc.pc
   lipo -create -output "$DEPS/lib/libopusenc.a" "${libs[@]}"
   cp "$dir/COPYING" "$LICENSES/libopusenc.txt"
   touch "$stamp"
@@ -975,6 +984,8 @@ build_opusfile() {
   mkdir -p "$DEPS/include" "$DEPS/lib/pkgconfig"
   cp -R "$dir/install-arm64/include/." "$DEPS/include/"
   cp "$dir"/install-arm64/lib/pkgconfig/*.pc "$DEPS/lib/pkgconfig/"
+  # Same arm64-only-prefix bug as build_opus and build_libopusenc above.
+  sed -i '' "s|^prefix=.*|prefix=$DEPS|; s|^libdir=.*|libdir=\${prefix}/lib|; s|^includedir=.*|includedir=\${prefix}/include|" "$DEPS/lib/pkgconfig"/opusfile.pc "$DEPS/lib/pkgconfig"/opusurl.pc
   lipo -create -output "$DEPS/lib/libopusfile.a" "${libs[@]}"
   lipo -create -output "$DEPS/lib/libopusurl.a" "${url_libs[@]}"
   cp "$dir/COPYING" "$LICENSES/opusfile.txt"
