@@ -17,7 +17,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/helpers
-          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh') }}
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
       - name: Build helpers
         run: scripts/build-helpers.sh
       - name: Build and test TampCore
@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/helpers
-          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh') }}
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
       - name: Build helpers
         run: scripts/build-helpers.sh
       - name: Install XcodeGen
@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/helpers
-          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh') }}
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
       - name: Build helpers
         run: scripts/build-helpers.sh
       - name: Install XcodeGen
@@ -150,7 +150,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/helpers
-          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh') }}
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Build a Release app and run the notarization checks

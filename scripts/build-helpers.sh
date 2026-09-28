@@ -67,6 +67,8 @@ ZPAQ_COMMIT=9ab539f644e364f0d92e2918b90ce2534c75653f
 MINIZIP_VERSION=4.2.2
 MINIZIP_GIT=https://github.com/zlib-ng/minizip-ng
 MINIZIP_COMMIT=7b2387161c542fa9f427352dcdef76097d0d692b
+# Bump when a minizip patch changes, so cached builds are redone.
+MINIZIP_REVISION=2
 
 ARCHS=(arm64 x86_64)
 UNIVERSAL_CMAKE=(
@@ -362,11 +364,12 @@ build_zpaq() {
 # minizip from minizip-ng, only for writing zstd inside ZIP (official 7-Zip reads
 # it but can't write it). AES through Apple's CommonCrypto.
 build_minizip() {
-  local version="$MINIZIP_VERSION-zstd$ZSTD_VERSION"
+  local version="$MINIZIP_VERSION-$MINIZIP_REVISION-zstd$ZSTD_VERSION"
   built minizip "$version" && return
   local dir="$SRC/minizip-ng-$MINIZIP_VERSION"
   fetch_git "$MINIZIP_GIT" "$MINIZIP_VERSION" "$MINIZIP_COMMIT" "$dir"
   patch -d "$dir" -p1 --quiet <"$PATCHES/minizip-ng-link-data.patch"
+  patch -d "$dir" -p1 --quiet <"$PATCHES/minizip-ng-tamp-options.patch"
   echo "Building minizip $MINIZIP_VERSION"
   cmake -S "$dir" -B "$dir/out" "${UNIVERSAL_CMAKE[@]}" -DCMAKE_PREFIX_PATH="$DEPS" \
     -DMZ_COMPAT=OFF -DMZ_ZLIB=OFF -DMZ_BZIP2=OFF -DMZ_LZMA=OFF -DMZ_PPMD=OFF -DMZ_ZSTD=ON \

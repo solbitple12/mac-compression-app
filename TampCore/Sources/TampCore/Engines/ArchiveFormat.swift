@@ -93,4 +93,57 @@ public enum ArchiveFormat: String, CaseIterable, Codable, Sendable {
     public static func formats(in group: FormatGroup) -> [ArchiveFormat] {
         allCases.filter { $0.group == group }
     }
+
+    /// The compression methods this format can hold inside, default first.
+    /// Empty for formats with only one.
+    public var methods: [CompressionMethod] {
+        switch self {
+        case .zip: [.deflate, .deflate64, .bzip2, .lzma, .zstd]
+        case .sevenZip: [.lzma2, .lzma, .ppmd, .bzip2, .deflate]
+        default: []
+        }
+    }
+
+    /// `method` if this format can hold it, else the format's default.
+    public func resolvedMethod(_ method: CompressionMethod?) -> CompressionMethod? {
+        guard let method, methods.contains(method) else { return methods.first }
+        return method
+    }
+}
+
+/// A compression method inside a ZIP or 7Z archive.
+public enum CompressionMethod: String, CaseIterable, Codable, Sendable {
+    case deflate
+    case deflate64
+    case bzip2
+    case lzma
+    case lzma2
+    case ppmd
+    case zstd
+
+    public var title: String {
+        switch self {
+        case .deflate: "Deflate"
+        case .deflate64: "Deflate64"
+        case .bzip2: "BZip2"
+        case .lzma: "LZMA"
+        case .lzma2: "LZMA2"
+        case .ppmd: "PPMd"
+        case .zstd: "Zstandard"
+        }
+    }
+
+    /// The name 7zz's -mm= and -m0= switches take. Nil for zstd, which official
+    /// 7-Zip can read in a ZIP but not write.
+    var sevenZipName: String? {
+        switch self {
+        case .deflate: "Deflate"
+        case .deflate64: "Deflate64"
+        case .bzip2: "BZip2"
+        case .lzma: "LZMA"
+        case .lzma2: "LZMA2"
+        case .ppmd: "PPMd"
+        case .zstd: nil
+        }
+    }
 }

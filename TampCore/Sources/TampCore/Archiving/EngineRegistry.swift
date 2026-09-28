@@ -11,7 +11,8 @@ public struct EngineRegistry: Sendable {
 
     public static func standard(helpers: HelperLocator = .standard) -> EngineRegistry {
         let tarFormats: [ArchiveFormat] = [.tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr]
-        return EngineRegistry(engines: [ZipEngine(helpers: helpers)] + tarFormats.map { TarEngine(format: $0, helpers: helpers) })
+        let archivers: [any ArchiveEngine] = [ZipEngine(helpers: helpers), SevenZipEngine(helpers: helpers)]
+        return EngineRegistry(engines: archivers + tarFormats.map { TarEngine(format: $0, helpers: helpers) })
     }
 
     /// Formats Tamp can write, in picker order.
@@ -36,6 +37,8 @@ public struct EngineRegistry: Sendable {
         switch ArchiveDetector.format(of: archive) {
         case .zip:
             return engine(for: .zip)
+        case .sevenZip:
+            return engine(for: .sevenZip)
         case .tar:
             return tarExtractor
         case let detected? where detected.isCompressedTar:
@@ -63,6 +66,7 @@ public enum ArchiveDetector {
         [0x50, 0x4B, 0x05, 0x06], // the end record of an empty archive
         [0x50, 0x4B, 0x07, 0x08], // spanned archives start with a data descriptor signature
     ]
+    static let sevenZipSignature: [UInt8] = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]
     /// POSIX and GNU tar headers carry "ustar" at offset 257.
     static let tarMagicOffset = 257
     static let tarMagic = Array("ustar".utf8)
@@ -89,6 +93,7 @@ public enum ArchiveDetector {
         (".tar.br", .tarBr), (".tbr", .tarBr),
         (".tar", .tar),
         (".zip", .zip),
+        (".7z", .sevenZip),
     ]
 
     /// The archive format a file name claims, such as `.tarGz` for "x.tar.gz" or "x.tgz".
@@ -97,7 +102,7 @@ public enum ArchiveDetector {
         return nameSuffixes.first { name.hasSuffix($0.suffix) && name.count > $0.suffix.count }?.format
     }
 
-    /// - Returns: `.zip`, `.tar`, the compressed tar format whose compressor wrote
+    /// - Returns: `.zip`, `.sevenZip`, `.tar`, the compressed tar format whose compressor wrote
     ///   the file's first bytes (whatever the stream holds), or nil.
     public static func format(of url: URL) -> ArchiveFormat? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
@@ -108,6 +113,7 @@ public enum ArchiveDetector {
 
     static func format(ofHeader bytes: [UInt8]) -> ArchiveFormat? {
         if zipSignatures.contains(where: { bytes.starts(with: $0) }) { return .zip }
+        if bytes.starts(with: sevenZipSignature) { return .sevenZip }
         // Before the short compression signatures, which a tar's first file name could start with.
         let end = tarMagicOffset + tarMagic.count
         if bytes.count >= end, Array(bytes[tarMagicOffset..<end]) == tarMagic { return .tar }

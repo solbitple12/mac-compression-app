@@ -38,7 +38,21 @@ final class AppModel {
     // MARK: Format and speed
 
     var hint: StepHint? {
-        registry.engine(for: choice.format)?.hint(for: choice.step, options: ArchiveOptions())
+        registry.engine(for: choice.format)?.hint(for: choice.step, options: choice.options)
+    }
+
+    /// The methods the current format can hold inside, empty if it has only one.
+    var methods: [CompressionMethod] {
+        choice.format.methods
+    }
+
+    var method: CompressionMethod? {
+        choice.method(for: choice.format)
+    }
+
+    func select(method: CompressionMethod) {
+        choice.setMethod(method, for: choice.format)
+        settings.archiveChoice = choice
     }
 
     /// False for plain TAR, which only bundles files.
@@ -135,7 +149,8 @@ final class AppModel {
                 let request = CompressRequest(
                     items: items,
                     destination: ArchivePlanner.destination(for: items, format: choice.format),
-                    step: choice.step
+                    step: choice.step,
+                    options: choice.options
                 )
                 await ArchiveJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
             case let .extract(archives):

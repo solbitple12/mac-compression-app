@@ -1,16 +1,46 @@
 import Foundation
 
-/// The format and speed step last used, restored at launch.
+/// The format, speed step and inner methods last used, restored at launch.
 public struct ArchiveChoice: Codable, Equatable, Sendable {
     public var format: ArchiveFormat
     public var step: SpeedStep
+    /// The method last chosen for each format that has several, keyed by the format's raw value.
+    private var methods: [String: CompressionMethod]
 
-    public init(format: ArchiveFormat, step: SpeedStep) {
+    public init(format: ArchiveFormat, step: SpeedStep, methods: [ArchiveFormat: CompressionMethod] = [:]) {
         self.format = format
         self.step = step
+        self.methods = Dictionary(uniqueKeysWithValues: methods.map { ($0.key.rawValue, $0.value) })
     }
 
     public static let `default` = ArchiveChoice(format: .zip, step: .normal)
+
+    /// The method for `format`: the one last chosen, else the format's default. Nil for
+    /// formats with only one.
+    public func method(for format: ArchiveFormat) -> CompressionMethod? {
+        format.resolvedMethod(methods[format.rawValue])
+    }
+
+    public mutating func setMethod(_ method: CompressionMethod, for format: ArchiveFormat) {
+        methods[format.rawValue] = method
+    }
+
+    /// The current format's settings, for a compress request or a hint.
+    public var options: ArchiveOptions {
+        ArchiveOptions(method: method(for: format))
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case format, step, methods
+    }
+
+    /// Settings saved before inner methods existed have no "methods".
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        format = try container.decode(ArchiveFormat.self, forKey: .format)
+        step = try container.decode(SpeedStep.self, forKey: .step)
+        methods = (try? container.decodeIfPresent([String: CompressionMethod].self, forKey: .methods)) ?? [:]
+    }
 }
 
 /// Tamp's saved settings, stored as Codable values in UserDefaults.

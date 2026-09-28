@@ -15,9 +15,13 @@ public struct EngineCapabilities: OptionSet, Sendable {
 public struct ArchiveOptions: Equatable, Sendable {
     /// Worker threads; always at least 1.
     public var threads: Int
+    /// The method inside a ZIP or 7Z archive. Nil, or one the format can't hold,
+    /// means the format's default (see `ArchiveFormat.resolvedMethod`).
+    public var method: CompressionMethod?
 
-    public init(threads: Int = ProcessInfo.processInfo.activeProcessorCount) {
+    public init(threads: Int = ProcessInfo.processInfo.activeProcessorCount, method: CompressionMethod? = nil) {
         self.threads = max(1, threads)
+        self.method = method
     }
 }
 

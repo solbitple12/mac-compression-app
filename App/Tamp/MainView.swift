@@ -42,7 +42,8 @@ struct MainView: View {
     }
 }
 
-/// The format picker, the six-step speed slider and the hint beneath it.
+/// The format picker, the method picker for ZIP and 7Z, the six-step speed slider
+/// and the hint beneath it.
 struct ArchiveSettingsView: View {
     let model: AppModel
 
@@ -63,6 +64,17 @@ struct ArchiveSettingsView: View {
             .pickerStyle(.menu)
             .fixedSize()
             .accessibilityIdentifier("formatPicker")
+
+            if let method = model.method, !model.methods.isEmpty {
+                Picker("Method", selection: Binding(get: { method }, set: { model.select(method: $0) })) {
+                    ForEach(model.methods, id: \.self) { candidate in
+                        Text(candidate.title).tag(candidate)
+                    }
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
+                .accessibilityIdentifier("methodPicker")
+            }
 
             // Plain TAR has nothing to tune, so its slider stays on Store.
             SpeedSlider(step: Binding(get: { model.effectiveStep }, set: { model.select(step: $0) }))

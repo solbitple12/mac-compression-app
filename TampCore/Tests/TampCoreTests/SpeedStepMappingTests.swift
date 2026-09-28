@@ -57,6 +57,87 @@ final class ZipMappingTests: XCTestCase {
             XCTAssertEqual(mapping.hint(for: step, options: ArchiveOptions(threads: 2)).outputExtension, "zip")
         }
     }
+
+    func testDeflateIsTheDefaultAndMethodsTheFormatCantHoldFallBackToIt() {
+        XCTAssertEqual(mapping.parameters(for: .normal, options: ArchiveOptions(threads: 2)).method, .deflate)
+        XCTAssertEqual(mapping.parameters(for: .normal, options: ArchiveOptions(threads: 2, method: .ppmd)).method, .deflate)
+    }
+
+    func testSevenZipWritesEveryMethodButZstandard() {
+        for method in ArchiveFormat.zip.methods {
+            let parameters = mapping.parameters(for: .good, options: ArchiveOptions(threads: 4, method: method))
+            XCTAssertEqual(parameters.writer, method == .zstd ? .minizip : .sevenZip, method.title)
+        }
+        let bzip2 = mapping.parameters(for: .good, options: ArchiveOptions(threads: 4, method: .bzip2))
+        XCTAssertEqual(bzip2.sevenZipArguments, ["-tzip", "-mm=BZip2", "-mx=7", "-mmt=4"])
+    }
+
+    func testZstandardLevelsAndStore() {
+        let options = ArchiveOptions(threads: 4, method: .zstd)
+        XCTAssertEqual(SpeedStep.allCases.map { mapping.parameters(for: $0, options: options).level }, [0, 1, 3, 9, 15, 19])
+        XCTAssertEqual(mapping.parameters(for: .best, options: options).minizipArguments, ["-t", "-19"])
+        // Store needs no compressor, so 7zz writes it.
+        let store = mapping.parameters(for: .store, options: options)
+        XCTAssertEqual(store.writer, .sevenZip)
+        XCTAssertEqual(store.sevenZipArguments, ["-tzip", "-mm=Copy", "-mx=0", "-mmt=4"])
+    }
+
+    func testOnlyDeflateClaimsToOpenEverywhere() {
+        let deflate = mapping.hint(for: .normal, options: ArchiveOptions(threads: 2))
+        XCTAssertEqual(deflate.notes, ["Opens on any computer, including Windows"])
+        for method in [CompressionMethod.deflate64, .bzip2, .lzma, .zstd] {
+            let notes = mapping.hint(for: .normal, options: ArchiveOptions(threads: 2, method: method)).notes
+            XCTAssertTrue(notes.contains { $0.contains("7-Zip") }, method.title)
+        }
+    }
+
+    func testHintMemoryIsPositiveForEveryMethodAndStep() {
+        for method in ArchiveFormat.zip.methods {
+            for step in SpeedStep.allCases {
+                XCTAssertGreaterThan(mapping.hint(for: step, options: ArchiveOptions(threads: 4, method: method)).peakMemoryBytes, 0)
+            }
+        }
+    }
+}
+
+final class SevenZipMappingTests: XCTestCase {
+    let mapping = SevenZipMapping()
+
+    func testLevelsAndArguments() {
+        let levels = SpeedStep.allCases.map { mapping.parameters(for: $0, options: ArchiveOptions(threads: 4)).level }
+        XCTAssertEqual(levels, [0, 1, 3, 5, 7, 9])
+        XCTAssertEqual(mapping.parameters(for: .best, options: ArchiveOptions(threads: 8)).sevenZipArguments,
+                       ["-t7z", "-m0=LZMA2", "-mx=9", "-mmt=8"])
+        XCTAssertEqual(mapping.parameters(for: .store, options: ArchiveOptions(threads: 2, method: .ppmd)).sevenZipArguments,
+                       ["-t7z", "-m0=Copy", "-mx=0", "-mmt=2"])
+        XCTAssertEqual(mapping.parameters(for: .normal, options: ArchiveOptions(threads: 2, method: .ppmd)).sevenZipArguments,
+                       ["-t7z", "-m0=PPMd", "-mx=5", "-mmt=2"])
+    }
+
+    func testZstandardIsNotA7ZMethod() {
+        XCTAssertEqual(mapping.parameters(for: .normal, options: ArchiveOptions(threads: 2, method: .zstd)).method, .lzma2)
+    }
+
+    func testMemoryGrowsWithTheStepOnOneThread() {
+        let options = ArchiveOptions(threads: 1)
+        let memory = SpeedStep.allCases.map { mapping.hint(for: $0, options: options).peakMemoryBytes }
+        XCTAssertEqual(memory, memory.sorted())
+        // Best: a 256 MB dictionary with the BT4 match finder needs about 3 GB.
+        XCTAssertGreaterThan(memory.last ?? 0, 2 << 30)
+    }
+
+    func testMemoryStaysUnderHalfTheRAMWithManyThreads() {
+        let hint = mapping.hint(for: .best, options: ArchiveOptions(threads: 256))
+        let oneEncoder = mapping.hint(for: .best, options: ArchiveOptions(threads: 1)).peakMemoryBytes
+        XCTAssertLessThanOrEqual(hint.peakMemoryBytes, max(ProcessInfo.processInfo.physicalMemory / 2 + (64 << 20), oneEncoder * 2))
+    }
+
+    func testNotesPerMethod() {
+        XCTAssertEqual(mapping.hint(for: .normal, options: ArchiveOptions(threads: 2)).notes, [])
+        XCTAssertTrue(mapping.hint(for: .normal, options: ArchiveOptions(threads: 2, method: .ppmd)).notes[0].hasPrefix("PPMd"))
+        XCTAssertTrue(mapping.hint(for: .normal, options: ArchiveOptions(threads: 2, method: .bzip2)).notes[0].contains("compatibility"))
+        XCTAssertEqual(mapping.hint(for: .store, options: ArchiveOptions(threads: 2, method: .bzip2)).notes, [])
+    }
 }
 
 final class TarZstMappingTests: XCTestCase {

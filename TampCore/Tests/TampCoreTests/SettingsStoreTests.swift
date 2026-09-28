@@ -39,6 +39,26 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.archiveChoice(availableFormats: [.sevenZip, .zip]).format, .sevenZip)
     }
 
+    func testRemembersTheMethodForEachFormat() {
+        var choice = ArchiveChoice(format: .zip, step: .good)
+        XCTAssertEqual(choice.method(for: .zip), .deflate)
+        XCTAssertEqual(choice.method(for: .sevenZip), .lzma2)
+        XCTAssertNil(choice.method(for: .tarZst))
+        choice.setMethod(.zstd, for: .zip)
+        choice.setMethod(.ppmd, for: .sevenZip)
+        store.archiveChoice = choice
+        let restored = SettingsStore(defaults: defaults).archiveChoice
+        XCTAssertEqual(restored.method(for: .zip), .zstd)
+        XCTAssertEqual(restored.method(for: .sevenZip), .ppmd)
+        XCTAssertEqual(restored.options.method, .zstd)
+    }
+
+    func testChoicesSavedBeforeMethodsExistedStillLoad() {
+        defaults.set(Data(#"{"format":"sevenZip","step":4}"#.utf8), forKey: SettingsStore.Key.archiveChoice)
+        XCTAssertEqual(store.archiveChoice, ArchiveChoice(format: .sevenZip, step: .good))
+        XCTAssertEqual(store.archiveChoice.method(for: .sevenZip), .lzma2)
+    }
+
     func testRecentOutputDirectoriesAreDedupedNewestFirstAndCapped() {
         let a = URL(fileURLWithPath: "/tmp/a", isDirectory: true)
         let b = URL(fileURLWithPath: "/tmp/b", isDirectory: true)

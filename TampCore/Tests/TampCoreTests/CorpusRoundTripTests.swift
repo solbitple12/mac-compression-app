@@ -4,9 +4,9 @@ import XCTest
 /// Byte-for-byte round trips of the test corpus through every engine,
 /// and cancel-mid-job checks for extraction and for jobs run by the queue.
 final class CorpusRoundTripTests: EngineTestCase {
-    override var requiredHelpers: [String] { ["7zz", "bsdtar", "zstd", "xz", "pigz", "pbzip2", "brotli"] }
+    override var requiredHelpers: [String] { ["7zz", "bsdtar", "zstd", "xz", "pigz", "pbzip2", "brotli", "minizip"] }
 
-    private let engines: [any ArchiveEngine] = [ZipEngine()]
+    private let engines: [any ArchiveEngine] = [ZipEngine(), SevenZipEngine()]
         + [ArchiveFormat.tar, .tarGz, .tarBz2, .tarXz, .tarZst, .tarLz4, .tarLz, .tarBr].map { TarEngine(format: $0) }
 
     private func archiveName(_ base: String, for engine: any ArchiveEngine) -> String {
@@ -48,6 +48,26 @@ final class CorpusRoundTripTests: EngineTestCase {
             XCTAssertEqual(extracted.lastPathComponent, "Loose")
             for item in items {
                 try assertTreesEqual(item, extracted.appendingPathComponent(item.lastPathComponent))
+            }
+        }
+    }
+
+    func testEveryInnerMethodRoundTripsTheCorpus() async throws {
+        let corpus = try makeCorpus()
+        for engine in [ZipEngine(), SevenZipEngine()] as [any ArchiveEngine] {
+            for method in engine.format.methods {
+                let label = "\(engine.format.title) \(method.title)"
+                let archive = try await engine.compress(
+                    CompressRequest(items: [corpus], destination: output.appendingPathComponent("\(method.title).\(engine.format.fileExtension)"),
+                                    step: .good, options: ArchiveOptions(threads: 2, method: method)),
+                    progress: { _ in }
+                )
+                let extracted = try await engine.extract(
+                    ExtractRequest(archive: archive, destinationDirectory: try makeFolder("Method-\(engine.format.title)-\(method.title)")),
+                    progress: { _ in }
+                )
+                XCTAssertEqual(extracted.lastPathComponent, "Corpus", label)
+                try assertTreesEqual(corpus, extracted)
             }
         }
     }

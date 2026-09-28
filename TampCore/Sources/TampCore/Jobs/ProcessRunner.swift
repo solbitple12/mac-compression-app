@@ -29,16 +29,20 @@ public struct ProcessRunner: Sendable {
     ///     here rather than in `arguments`, which other processes can read.
     ///   - onOutputLine: Called for each line of stdout. Carriage returns and
     ///     backspaces also end a line, since progress meters redraw with them.
+    ///   - currentDirectory: The helper's working directory, for tools that store
+    ///     paths relative to it. Nil keeps Tamp's own.
     /// - Throws: `CancellationError` when the task was cancelled, whatever the exit code.
     public func run(
         _ executable: URL,
         arguments: [String] = [],
         standardInput: Data? = nil,
+        currentDirectory: URL? = nil,
         onOutputLine: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws -> ProcessResult {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
+        if let currentDirectory { process.currentDirectoryURL = currentDirectory }
         let input = Pipe()
         let output = Pipe()
         let errors = Pipe()
