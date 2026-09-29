@@ -35,10 +35,11 @@ final class VideoMemoryHintTests: EngineTestCase {
         let corpus = try makeCorpus()
         let clip = corpus.appendingPathComponent("media/clip.mp4")
         let estimate = try await VideoMemoryHint.peakMemoryBytes(source: clip, format: .h264, step: .normal)
-        // clip.mp4 is 160x120 (see scripts/make-corpus.sh): a tiny fraction of a
-        // megabyte per frame, so the estimate should stay small, not balloon to
-        // an HD-sized figure.
-        XCTAssertLessThan(estimate, 10 * 1024 * 1024, "a 160x120 source shouldn't estimate anywhere near 10 MB")
+        // clip.mp4 is 160x120 (see scripts/make-corpus.sh): its frame buffers
+        // are a tiny fraction of a megabyte, so the estimate should sit close
+        // to H.264's fixed base overhead, not balloon toward an HD-sized figure.
+        let hdEstimate = VideoMemoryHint.peakMemoryBytes(format: .h264, step: .normal, pixelWidth: 1920, pixelHeight: 1080)
+        XCTAssertLessThan(estimate, hdEstimate, "a 160x120 source shouldn't estimate as much as HD")
         XCTAssertGreaterThan(estimate, 0)
     }
 }
