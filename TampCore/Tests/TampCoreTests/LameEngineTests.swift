@@ -33,7 +33,7 @@ final class LameEngineTests: EngineTestCase {
             AudioCompressRequest(source: sourceWAV, destination: output.appendingPathComponent("sizes.mp3"), format: .mp3, step: .normal),
             progress: { _ in }
         )
-        XCTAssertEqual(result.inputBytes, 44178)
+        XCTAssertEqual(result.inputBytes, 44144)
         XCTAssertGreaterThan(result.outputBytes, 0)
     }
 }

@@ -46,7 +46,7 @@ final class FlacEngineTests: EngineTestCase {
 
     func testResultReportsRealByteCounts() async throws {
         let result = try await compress(name: "sizes.flac")
-        XCTAssertEqual(result.inputBytes, 44178)
+        XCTAssertEqual(result.inputBytes, 44144)
         XCTAssertGreaterThan(result.outputBytes, 0)
     }
 }

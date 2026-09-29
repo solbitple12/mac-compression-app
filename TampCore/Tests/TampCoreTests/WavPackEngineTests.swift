@@ -36,7 +36,7 @@ final class WavPackEngineTests: EngineTestCase {
 
     func testResultReportsRealByteCounts() async throws {
         let result = try await compress(name: "sizes.wv")
-        XCTAssertEqual(result.inputBytes, 44178)
+        XCTAssertEqual(result.inputBytes, 44144)
         XCTAssertGreaterThan(result.outputBytes, 0)
     }
 

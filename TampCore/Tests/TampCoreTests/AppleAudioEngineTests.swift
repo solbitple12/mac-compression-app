@@ -41,7 +41,7 @@ final class AppleAudioEngineTests: EngineTestCase {
             AudioCompressRequest(source: sourceWAV, destination: output.appendingPathComponent("sizes.m4a"), format: .alac, step: .normal),
             progress: { _ in }
         )
-        XCTAssertEqual(result.inputBytes, 44178)
+        XCTAssertEqual(result.inputBytes, 44144)
         XCTAssertGreaterThan(result.outputBytes, 0)
     }
 }

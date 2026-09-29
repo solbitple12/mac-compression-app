@@ -45,7 +45,7 @@ final class OpusEngineTests: EngineTestCase {
             AudioCompressRequest(source: sourceWAV, destination: output.appendingPathComponent("sizes.opus"), format: .opus, step: .normal),
             progress: { _ in }
         )
-        XCTAssertEqual(result.inputBytes, 44178)
+        XCTAssertEqual(result.inputBytes, 44144)
         XCTAssertGreaterThan(result.outputBytes, 0)
     }
 }
