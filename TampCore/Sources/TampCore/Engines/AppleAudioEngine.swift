@@ -19,6 +19,7 @@ enum AppleAudioConversion {
             }
             let frameCapacity: AVAudioFrameCount = 4096
             var reachedInputEnd = false
+            var readError: Error?
 
             // The input block below may be called several times per convert(), since
             // an encoder (AAC's 1024-sample packets, say) rarely lines up with
@@ -36,13 +37,23 @@ enum AppleAudioConversion {
                         return nil
                     }
                     guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: frameCapacity) else {
-                        inputStatus.pointee = .noDataNow
+                        // Allocation failure won't fix itself on a retry either, so
+                        // this ends the stream rather than asking the converter to
+                        // call back again, which would loop forever.
+                        reachedInputEnd = true
+                        inputStatus.pointee = .endOfStream
                         return nil
                     }
                     do {
                         try input.read(into: inputBuffer, frameCount: frameCapacity)
                     } catch {
-                        inputStatus.pointee = .noDataNow
+                        // A read error, unlike "no data yet", won't resolve on a later
+                        // call either: treating it as .noDataNow would have the
+                        // converter retry the same failing read forever. End the
+                        // stream and surface the error once conversion has stopped.
+                        readError = error
+                        reachedInputEnd = true
+                        inputStatus.pointee = .endOfStream
                         return nil
                     }
                     if inputBuffer.frameLength == 0 {
@@ -59,7 +70,10 @@ enum AppleAudioConversion {
                 if outputBuffer.frameLength > 0 {
                     try output.write(from: outputBuffer)
                 }
-                if status == .endOfStream { break }
+                if status == .endOfStream {
+                    if let readError { throw TampError.other("Tamp couldn't read that audio file: \(readError.localizedDescription)") }
+                    break
+                }
             }
         }
     }
