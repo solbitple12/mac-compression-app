@@ -7,12 +7,16 @@ struct MainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             DropZone(model: model)
-            Group {
-                ArchiveSettingsView(model: model)
-                AdvancedPanel(model: model)
+            if !model.mediaItems.isEmpty {
+                MediaBatchView(model: model)
+            } else {
+                Group {
+                    ArchiveSettingsView(model: model)
+                    AdvancedPanel(model: model)
+                }
+                .disabled(isExtracting)
+                .opacity(isExtracting ? 0.5 : 1)
             }
-            .disabled(isExtracting)
-            .opacity(isExtracting ? 0.5 : 1)
             HStack {
                 Text(destinationText)
                     .font(.callout)
@@ -61,6 +65,9 @@ struct MainView: View {
     }
 
     private var startTitle: String {
+        if !model.mediaItems.isEmpty {
+            return model.mediaItems.count == 1 ? "Compress" : "Compress \(model.mediaItems.count)"
+        }
         switch model.pendingAction {
         case let .extract(archives): archives.count == 1 ? "Extract" : "Extract \(archives.count)"
         case .compress, nil: "Compress"

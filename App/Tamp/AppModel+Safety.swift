@@ -110,7 +110,15 @@ extension AppModel {
     /// Runs the checks that haven't been answered, asking the first that fails, then
     /// launches: memory, then disk, then the long-job warning, then the Trash.
     func proceed() {
-        guard let action = pendingAction, canStart else { return }
+        guard canStart else { return }
+        // Media jobs don't have a peak-memory estimate to check yet (see
+        // VideoMemoryHint's doc comment); they skip straight to launch the
+        // same way extracting already does.
+        guard mediaItems.isEmpty else {
+            launchMediaBatch()
+            return
+        }
+        guard let action = pendingAction else { return }
         guard case .compress = action, let engine = registry.engine(for: choice.format) else {
             launch()
             return

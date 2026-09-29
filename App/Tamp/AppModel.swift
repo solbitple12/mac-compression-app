@@ -9,13 +9,19 @@ import TampCore
 @Observable
 final class AppModel {
     let registry: EngineRegistry
+    let mediaRegistry: MediaEngineRegistry
     private(set) var choice: ArchiveChoice
     /// Dropped or chosen, not yet started.
     private(set) var pendingItems: [URL] = []
     /// What the start button will do with the pending items. Nil while there are
-    /// none, and while Tamp is still checking them (`isCheckingItems`).
+    /// none, while Tamp is still checking them (`isCheckingItems`), and while
+    /// `mediaItems` holds the pending batch instead.
     private(set) var pendingAction: DropAction?
     private(set) var isCheckingItems = false
+    /// Every pending item recognized as its own image, audio or video source,
+    /// each with its own format and quality; empty unless every pending item
+    /// qualifies, in which case `pendingAction` stays nil.
+    private(set) var mediaItems: [MediaItem] = []
     /// Every job since launch, oldest first, until "Clear Finished".
     private(set) var jobs: [JobSnapshot] = []
 
@@ -51,8 +57,9 @@ final class AppModel {
     /// Bumped whenever the pending items change, so a check that finishes late is ignored.
     @ObservationIgnored private var checkGeneration = 0
 
-    init(registry: EngineRegistry = .standard(), settings: SettingsStore = SettingsStore()) {
+    init(registry: EngineRegistry = .standard(), mediaRegistry: MediaEngineRegistry = .standard(), settings: SettingsStore = SettingsStore()) {
         self.registry = registry
+        self.mediaRegistry = mediaRegistry
         self.settings = settings
         // One job at a time: the memory checks guard a job, and two large ones at
         // once would each pass their check and then compete for the same memory.
@@ -172,8 +179,16 @@ final class AppModel {
         scheduleEstimate()
         guard !pendingItems.isEmpty else {
             isCheckingItems = false
+            mediaItems = []
             return
         }
+        // Extension checks only, no disk access, so this can run on the main actor.
+        if let items = MediaBatch.items(for: pendingItems, registry: mediaRegistry) {
+            mediaItems = items
+            isCheckingItems = false
+            return
+        }
+        mediaItems = []
         isCheckingItems = true
         let generation = checkGeneration
         let items = pendingItems
@@ -213,9 +228,16 @@ final class AppModel {
     var isConfirmingTrash = false
 
     var canStart: Bool {
+        if !mediaItems.isEmpty { return true }
         guard let action = pendingAction else { return false }
         if case .compress = action { return passwordProblem == nil }
         return true
+    }
+
+    /// Changes one pending media item's format, step or quality, for its row's controls.
+    func updateMediaItem(_ id: MediaItem.ID, _ change: (inout MediaItem) -> Void) {
+        guard let index = mediaItems.firstIndex(where: { $0.id == id }) else { return }
+        change(&mediaItems[index])
     }
 
     /// The start button: runs the checks from the top (see `proceed()`).
@@ -252,6 +274,38 @@ final class AppModel {
             enqueueCompress(CompressJob(request: request, afterwards: afterwards, format: choice.format), estimate: estimate)
         case let .extract(archives):
             extract(archives)
+        }
+    }
+
+    /// Compresses each pending media item as its own independent job, with its
+    /// own format, step and quality - unlike `launch()`'s archive path, which
+    /// bundles everything into one output.
+    func launchMediaBatch() {
+        guard !mediaItems.isEmpty else { return }
+        let items = mediaItems
+        clearPendingItems()
+        startQuestion = nil
+        let registry = mediaRegistry
+        let queue = queue
+        let willWrite = outputFolderHandler
+        for item in items {
+            switch item.target {
+            case let .image(format):
+                guard let engine = registry.imageEngine(for: format) else { continue }
+                let destination = MediaPlanner.destination(for: item.source, fileExtension: format.fileExtension)
+                let request = ImageCompressRequest(source: item.source, destination: destination, format: format, step: item.step, quality: item.quality)
+                Task { await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite) }
+            case let .audio(format):
+                guard let engine = registry.audioEngine(for: format) else { continue }
+                let destination = MediaPlanner.destination(for: item.source, fileExtension: format.fileExtension)
+                let request = AudioCompressRequest(source: item.source, destination: destination, format: format, step: item.step, quality: item.quality)
+                Task { await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite) }
+            case let .video(format):
+                guard let engine = registry.videoEngine(for: format) else { continue }
+                let destination = MediaPlanner.destination(for: item.source, fileExtension: format.fileExtension)
+                let request = VideoCompressRequest(source: item.source, destination: destination, format: format, step: item.step, quality: item.quality)
+                Task { await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite) }
+            }
         }
     }
 
