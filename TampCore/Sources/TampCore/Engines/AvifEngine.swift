@@ -24,6 +24,9 @@ public enum AvifMapping {
 /// there's no bundled AVIF decoder yet (see `dav1d` in `scripts/build-helpers.sh`),
 /// so nothing in Tamp can open or preview an AVIF this engine writes.
 ///
+/// SVT-AV1 only encodes 4:2:0 chroma, so "lossless" here is lossless luma at best,
+/// not a true pixel-for-pixel round trip the way JxlEngine's lossless JPEG path is.
+///
 /// Metadata handling isn't wired up yet, the same as JxlEngine and for the same
 /// reason: a wrong avifenc flag would fail the job outright.
 public struct AvifEngine: ImageEngine {
@@ -49,7 +52,14 @@ public struct AvifEngine: ImageEngine {
 
         let output = try await SafeOutput.write(to: request.destination, fileExtension: format.fileExtension) { temporary in
             progress(0)
-            var arguments = ["-s", "\(speed)", "-j", "all"]
+            // SVT-AV1, the only AV1 encoder this build has (see the type doc), only
+            // supports 4:2:0 chroma subsampling; avifenc's automatic format choice
+            // picks something else (4:4:4 for --lossless, to actually be lossless)
+            // and SVT then refuses the job outright ("Only support 420 now"), so this
+            // always forces 4:2:0. That means even "lossless" here can't be truly
+            // lossless in chroma, only as close as 4:2:0 allows - an SVT-AV1
+            // limitation, not a choice.
+            var arguments = ["-s", "\(speed)", "-j", "all", "-y", "420"]
             arguments += request.quality == .lossless ? ["--lossless"] : ["-q", "\(AvifMapping.quality(for: request.quality))"]
             arguments += [request.source.path, temporary.path]
             let result = try await runner.run(avifenc, arguments: arguments)
