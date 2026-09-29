@@ -1095,11 +1095,14 @@ build_libvpx() {
     mkdir -p "$dir/build-$arch"
     (
       cd "$dir/build-$arch"
+      # ${as_flag[@]+...} rather than a bare "${as_flag[@]}": macOS's /bin/bash
+      # is 3.2, where expanding an empty array under this script's `set -u`
+      # throws "unbound variable" instead of expanding to nothing.
       "$dir/configure" --target="$arch-darwin23-gcc" --prefix="$prefix" \
         --disable-shared --enable-static --enable-pic \
         --enable-vp9 --disable-vp8 \
         --disable-examples --disable-tools --disable-docs --disable-unit-tests \
-        "${as_flag[@]}" >/dev/null
+        ${as_flag[@]+"${as_flag[@]}"} >/dev/null
       make -j"$JOBS" >/dev/null
       make install >/dev/null
     )
