@@ -4,9 +4,11 @@ A native macOS compression app: archive formats with a six-step speed slider,
 media re-encoding, and a "Recommend for me" mode. macOS 14+, Swift and SwiftUI,
 distributed as a notarized Developer ID app.
 
-Work in progress: Phases 1 and 2 (all archive formats, advanced options, estimates and
-safety checks) are done. Phase 3's codecs (images and audio) are all built; its batch
-UI comes next. `CLAUDE.md` has notes for working on it.
+Work in progress: Phases 1 through 3 (all archive formats, advanced options, estimates
+and safety checks, plus images and audio) are done. Phase 4's video codecs (H.264 and
+HEVC through VideoToolbox, AV1 through SVT-AV1, VP9 through libvpx, all via a bundled
+FFmpeg) are built too; the batch UI, clip preview and RAM estimates for all of Phase 3
+and 4 come next. `CLAUDE.md` has notes for working on it.
 
 ## Layout
 
@@ -15,9 +17,9 @@ UI comes next. `CLAUDE.md` has notes for working on it.
 | `App/Tamp/` | The SwiftUI app: main window, drop zone, format picker, speed slider, job list |
 | `project.yml` | XcodeGen spec for the app; `xcodegen generate` writes `Tamp.xcodeproj` |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
-| `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping, for archives and (Phase 3) images and audio |
+| `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping, for archives and (Phase 3/4) images, audio and video |
 | `TampCore/Sources/TampCore/Archiving/` | Engine registry, archive detection by first bytes, what a drop does, output names |
-| `TampCore/Sources/TampCore/Media/` | Image and audio engine registry (Phase 3) |
+| `TampCore/Sources/TampCore/Media/` | Image, audio and video engine registry (Phase 3/4) |
 | `TampCore/Sources/TampCore/Estimation/` | Input scan, time/size/memory estimates from short probes, thread scaling, local history |
 | `TampCore/Sources/TampCore/Safety/` | Memory, swap and disk sampling, the resource monitor that pauses and stops jobs, pre-flight checks |
 | `TampCore/Sources/TampCore/Settings/` | Last format and speed step, recent output folders |
@@ -167,6 +169,14 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 - ZIP with Zstandard can't be split into parts (minizip writes it, not 7-Zip).
 - If two copies of Tamp run at once, the one launched second can remove the other's
   unfinished output while cleaning up after crashes.
+- AVIF has no true lossless mode: SVT-AV1 can only encode 4:2:0 chroma, which avifenc's
+  own `--lossless` refuses to run at all, so "lossless" AVIF is really the best lossy
+  quality instead.
+- Nothing in Tamp can open or preview an AV1 or VP9 file it just wrote (no bundled
+  decoder for either); AVFoundation may or may not decode them depending on the OS
+  version, same as AVIF.
+- VideoToolbox's constant-quality mode only works on Apple Silicon; on Intel, H.264 and
+  HEVC fall back to a target bitrate instead, with no real per-step benchmark behind it yet.
 
 ## Bundled components and licenses
 
@@ -197,6 +207,9 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 | [SVT-AV1](https://github.com/AOMediaCodec/SVT-AV1) | 4.2.0 | AVIF's AV1 encoder (statically linked into `avifenc`); Phase 4's video too | BSD 3-clause Clear plus the AOM patent license |
 | [libavif](https://github.com/AOMediaCodec/libavif) (`avifenc`) | 1.4.2 | AVIF, encode only (no bundled decoder yet) | BSD 2-clause; its own CMake fetches and statically links zlib, libpng and libjpeg-turbo to read source images, each zlib/BSD/IJG-licensed — their exact license texts still need capturing here before a real release |
 | [opus-tools](https://github.com/xiph/opus-tools) (`opusenc`) | 0.2 | Opus | BSD 2-clause; statically links [libopus](https://github.com/xiph/opus) (BSD 3-clause), [libogg](https://github.com/xiph/ogg) (BSD-style) and [libopusenc](https://github.com/xiph/libopusenc) (BSD 3-clause) |
+| Apple's VideoToolbox | — | H.264, HEVC video (through the FFmpeg helper below) | System framework; nothing bundled |
+| [libvpx](https://github.com/webmproject/libvpx) | 1.17.0 | VP9 video (through the FFmpeg helper below); VP8 is built but disabled, nothing in Tamp writes it | BSD 3-clause plus a patent grant |
+| [FFmpeg](https://ffmpeg.org) (`ffmpeg`) | n9.0.2 | Video re-encoding: opens the source, copies every stream Tamp isn't re-encoding, and drives VideoToolbox, SVT-AV1 or libvpx for the one it is | GNU LGPL 2.1+; built with `--disable-gpl --disable-nonfree`, so x264, x265 and fdk-aac are never linked in; statically links SVT-AV1, libvpx and (VP9's audio track only, see below) libopus, all already in this table |
 
 Tamp patches three of them, with the patches in `scripts/patches`: minizip-ng (store link
 targets the Info-ZIP way, skip Mac junk files, read the password from stdin, mark archives
@@ -221,7 +234,23 @@ autotools bootstrap (no vendored `configure` in their git history, unlike every
 other Phase 3 source) — the only components of the app that aren't built with
 CMake, a vendored `configure`, or Cargo.
 
+Phase 4 (video) is built too: H.264 and HEVC through VideoToolbox, AV1 through
+SVT-AV1 (the same build AVIF uses) and VP9 through libvpx, all driven by the
+FFmpeg helper above. Every format copies audio, subtitle and metadata streams
+unchanged rather than re-encoding them, except VP9: its container, WebM, has
+no support for AAC (the audio codec Tamp's own source videos use for testing),
+so VP9Engine re-encodes just the audio track to Opus instead of copying it —
+the one place a video job needs an audio encoder at all. AVIF's `--lossless`
+turned out to be a similar dead end discovered along the way: SVT-AV1 only
+encodes 4:2:0 chroma, but avifenc's own `--lossless` refuses anything but 4:4:4
+or 4:0:0, so AVIF "lossless" now means the best lossy quality (`-q 100`)
+instead, not a true pixel-for-pixel round trip the way JPEG XL's lossless JPEG
+path is.
+
 Still ahead: the batch UI, previews, per-file savings and metadata toggles in
-`App/Tamp` (nothing there has changed this phase yet), and the benchmark pass
-that Phase 2a ran for archive formats, to replace the speed-step mappings above
-marked as starting points with real measurements.
+`App/Tamp` (nothing there has changed this phase yet), video's presets and
+advanced controls, clip preview, encoder RAM estimates (the Estimation layer
+is still archive-format-only, from Phase 2 — nothing in Phase 3 or 4 has wired
+image/audio/video jobs into it yet), and the benchmark pass that Phase 2a ran
+for archive formats, to replace the speed-step mappings above marked as
+starting points with real measurements.
