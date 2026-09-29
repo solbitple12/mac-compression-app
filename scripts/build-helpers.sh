@@ -162,6 +162,22 @@ LAME_VERSION=4.0
 LAME_URL="https://downloads.sourceforge.net/project/lame/lame/4.0/lame-${LAME_VERSION}.tar.gz"
 LAME_SHA256=3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb
 
+# --- Phase 4: video ---
+
+# VP9, for the FFmpeg helper below; SVT-AV1 (already pinned above, shared with
+# AVIF) covers AV1. VP8 is left disabled at build time: nothing in Tamp writes it.
+LIBVPX_VERSION=1.17.0
+LIBVPX_GIT=https://github.com/webmproject/libvpx
+LIBVPX_COMMIT=6df3ec34557879fff673706f4a1d9fbd0f3a6f0e
+
+# H.264 and HEVC go through VideoToolbox (a system framework, nothing to build);
+# AV1 through the SVT-AV1 built above; VP9 through the libvpx built above. Built
+# with --disable-gpl --disable-nonfree, same as the "no x264/x265/fdk-aac" rule
+# everywhere else in this script: those encoders never enter the build.
+FFMPEG_VERSION=9.0.2
+FFMPEG_GIT=https://github.com/FFmpeg/FFmpeg
+FFMPEG_COMMIT=946fcce07b6dcd0331c8cc609192aeff5e1924f8
+
 ARCHS=(arm64 x86_64)
 UNIVERSAL_CMAKE=(
   -DCMAKE_BUILD_TYPE=Release
@@ -749,7 +765,7 @@ build_svtav1() {
   # one architecture's copy is enough; the static library itself needs lipo'ing
   # into a universal archive like every other DEPS library, so whichever
   # architecture links against it later (here, and again in Phase 4) gets its slice.
-  mkdir -p "$DEPS/include" "$DEPS/lib"
+  mkdir -p "$DEPS/include" "$DEPS/lib" "$DEPS/lib/pkgconfig"
   cp -R "$dir/install-arm64/include/." "$DEPS/include/"
   cp -R "$dir/install-arm64/lib/." "$DEPS/lib/"
   local static_library
@@ -758,6 +774,15 @@ build_svtav1() {
   local relative="${static_library#"$dir/install-arm64/lib/"}"
   lipo -create -output "$DEPS/lib/$relative" "$dir/install-arm64/lib/$relative" "$dir/install-x86_64/lib/$relative"
   cp "$dir/LICENSE.md" "$LICENSES/SVT-AV1.txt"
+  # Same fix as build_opus's pkgconfig copy: SVT-AV1's own SvtAv1Enc.pc, just
+  # copied above from install-arm64/lib/pkgconfig, still has its prefix/libdir
+  # baked to that single-architecture install path. Phase 4's FFmpeg build
+  # requires this exact module through pkg-config with no plain -lSvtAv1Enc
+  # fallback, so it needs to resolve to the lipo'd universal library above.
+  if [[ -f "$DEPS/lib/pkgconfig/SvtAv1Enc.pc" ]]; then
+    sed -i '' "s|^prefix=.*|prefix=$DEPS|; s|^libdir=.*|libdir=\${prefix}/lib|; s|^includedir=.*|includedir=\${prefix}/include|" \
+      "$DEPS/lib/pkgconfig/SvtAv1Enc.pc"
+  fi
   # SVT-AV1 installs its own CMake package as "SVT-AV1Config.cmake" (and a
   # pkg-config file named "SvtAv1Enc.pc"), but libavif's own check_avif_option
   # looks for a bare "SvtAv1Enc" target and calls find_package(svt) (lowercase) if
@@ -1048,6 +1073,92 @@ build_opustools() {
   stamp opusenc "$OPUSTOOLS_VERSION"
 }
 
+# libvpx into deps/, VP9 only (see the pin comment: VP8 is left disabled, since
+# nothing in Tamp writes it). Its own ./configure (not autotools, a hand-rolled
+# script with a similar --enable/--disable surface) takes a single --target
+# string per architecture rather than --host, encoding OS, arch and toolchain
+# together; darwin23 matches this script's macOS 14 deployment target.
+# x86_64's assembly needs an assembler the same way SVT-AV1's does; arm64's
+# NEON code is assembled by the compiler itself, so --as is only set below.
+build_libvpx() {
+  local stamp="$DEPS/.libvpx-$LIBVPX_VERSION"
+  [[ -f "$stamp" ]] && { echo "libvpx $LIBVPX_VERSION is already built"; return; }
+  command -v nasm >/dev/null || brew install nasm >/dev/null
+  local dir="$SRC/libvpx-$LIBVPX_VERSION"
+  fetch_git "$LIBVPX_GIT" "v$LIBVPX_VERSION" "$LIBVPX_COMMIT" "$dir"
+  local libs=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building libvpx $LIBVPX_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    local as_flag=()
+    [[ "$arch" == x86_64 ]] && as_flag=(--as=nasm)
+    mkdir -p "$dir/build-$arch"
+    (
+      cd "$dir/build-$arch"
+      "$dir/configure" --target="$arch-darwin23-gcc" --prefix="$prefix" \
+        --disable-shared --enable-static --enable-pic \
+        --enable-vp9 --disable-vp8 \
+        --disable-examples --disable-tools --disable-docs --disable-unit-tests \
+        "${as_flag[@]}" >/dev/null
+      make -j"$JOBS" >/dev/null
+      make install >/dev/null
+    )
+    local library
+    library="$(find "$prefix/lib" -type f -name 'libvpx.a' | head -1)"
+    [[ -n "$library" ]] || { echo "libvpx built for $arch but libvpx.a wasn't found under $prefix/lib" >&2; exit 1; }
+    libs+=("$library")
+  done
+  mkdir -p "$DEPS/include" "$DEPS/lib"
+  cp -R "$dir/install-arm64/include/." "$DEPS/include/"
+  lipo -create -output "$DEPS/lib/libvpx.a" "${libs[@]}"
+  cp "$dir/LICENSE" "$LICENSES/libvpx.txt"
+  touch "$stamp"
+}
+
+# ffmpeg, over VideoToolbox for H.264 and HEVC (a system framework: nothing to
+# link, just detected), SVT-AV1 for AV1 and the libvpx above for VP9. Built
+# with the plain default feature set (broad demuxer/decoder support for
+# whatever a source video happens to be) plus those three encoders, and
+# --disable-gpl --disable-nonfree so x264, x265 and fdk-aac can never be pulled
+# in even by accident; both are already the configure default, kept explicit
+# here for the same reason every other engine's argument arrays are explicit.
+# No audio encoder is linked in at all: Tamp's video jobs always copy audio,
+# subtitle and metadata streams (-c copy) rather than re-encoding them, so
+# there's nothing here for libopus/LAME/etc. to do.
+build_ffmpeg() {
+  built ffmpeg "$FFMPEG_VERSION" && return
+  local dir="$SRC/ffmpeg-$FFMPEG_VERSION"
+  fetch_git "$FFMPEG_GIT" "n$FFMPEG_VERSION" "$FFMPEG_COMMIT" "$dir"
+  local slices=()
+  for arch in "${ARCHS[@]}"; do
+    echo "Building ffmpeg $FFMPEG_VERSION for $arch"
+    local prefix="$dir/install-$arch"
+    mkdir -p "$dir/build-$arch"
+    (
+      cd "$dir/build-$arch"
+      export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig"
+      "$dir/configure" --prefix="$prefix" \
+        --arch="$arch" --target-os=darwin --enable-cross-compile \
+        --cc="clang -arch $arch" \
+        --extra-cflags="-arch $arch -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -I$DEPS/include" \
+        --extra-ldflags="-arch $arch -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -L$DEPS/lib" \
+        --disable-shared --enable-static --enable-pic \
+        --disable-gpl --disable-nonfree \
+        --enable-videotoolbox --enable-libsvtav1 --enable-libvpx \
+        --disable-doc --disable-htmlpages --disable-manpages --disable-podpages --disable-txtpages \
+        --disable-debug >/dev/null
+      make -j"$JOBS" >/dev/null
+      make install >/dev/null
+    )
+    local binary="$prefix/bin/ffmpeg"
+    [[ -x "$binary" ]] || { echo "ffmpeg built for $arch but wasn't found at $binary" >&2; exit 1; }
+    slices+=("$binary")
+  done
+  lipo -create -output "$BIN/ffmpeg" "${slices[@]}"
+  cp "$dir/COPYING.LGPLv2.1" "$LICENSES/ffmpeg.txt"
+  stamp ffmpeg "$FFMPEG_VERSION"
+}
+
 build_7zz
 build_zstd
 build_libraries
@@ -1073,3 +1184,5 @@ build_opus
 build_libopusenc
 build_opusfile
 build_opustools
+build_libvpx
+build_ffmpeg
