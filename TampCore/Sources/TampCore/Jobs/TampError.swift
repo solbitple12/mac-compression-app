@@ -116,22 +116,30 @@ extension TampError {
         // different tag ("Svt[error]:", "Svt[warning]:") and are kept.
         if tool == "ffmpeg" {
             // Unlike 7zz's short, front-loaded error output, ffmpeg's stderr is
-            // mostly informational chatter that appears on every run, success or
-            // failure alike: the version/build banner (traced against ffmpeg's own
-            // show_banner()/print_program_info() in fftools/opt_common.c), then
-            // "Input #0 ..."/stream mapping/"Output #0 ..." lines as it opens the
-            // files, then per-frame progress. The real, specific error is the last
-            // thing ffmpeg logs at the point of failure - except ffmpeg_cleanup()
-            // (fftools/ffmpeg.c) then logs one more generic line after it, always
-            // the same text, whenever transcoding had started before failing, so
-            // that generic trailer is skipped too rather than shadowing the
-            // specific line right before it.
+            // almost entirely informational chatter that appears on every run,
+            // success or failure alike, traced against ffmpeg's own source
+            // (fftools/opt_common.c, fftools/ffmpeg.c, libavformat/dump.c) end to
+            // end: the version/build banner, "Input #0 .../  Stream #0:.../Output
+            // #0 .../Stream mapping:/  Stream #0:0 -> .../Press [q] to stop", then
+            // periodic and final "frame=..." progress stats, then, if transcoding
+            // had started before failing, one last generic "Conversion failed!"
+            // trailer. All of that is routine noise on both success and failure;
+            // whatever real, specific error caused the failure is logged
+            // somewhere before the last of it, so this reads backwards past every
+            // known noise pattern to find that line instead of the first one.
+            let ffmpegNoisePrefixes = [
+                "ffmpeg version ", "built with ", "configuration: ",
+                "libavutil", "libavcodec", "libavformat", "libavdevice", "libavfilter", "libswscale", "libswresample",
+                "Input #", "Output #", "Stream #", "Stream mapping:", "Press [q] to stop", "frame=",
+            ]
             let lastLine = standardError
                 .split(whereSeparator: \.isNewline)
                 .reversed()
                 .lazy
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .first { !$0.isEmpty && $0 != "Conversion failed!" } ?? ""
+                .first { line in
+                    !line.isEmpty && line != "Conversion failed!" && !ffmpegNoisePrefixes.contains { line.hasPrefix($0) }
+                } ?? ""
             return .toolFailed(tool: tool, exitCode: exitCode, message: String(lastLine.prefix(200)))
         }
         let firstLine = standardError

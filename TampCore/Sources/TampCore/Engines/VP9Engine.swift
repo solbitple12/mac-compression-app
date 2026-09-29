@@ -20,6 +20,13 @@ public enum VP9Mapping {
 /// treats the CRF as a ceiling on a bitrate-controlled encode rather than pure
 /// constant quality (ffmpeg's own libvpxenc.c reads `-b:v 0` as the signal to
 /// use "constrained quality" mode outright).
+///
+/// The only video engine that re-encodes audio rather than copying it: WebM
+/// (VP9's container, since MP4 support for VP9 is unreliable outside Chrome)
+/// has no support for AAC, so an AAC source track can't just be copied the way
+/// FFmpegConversion's default "-c copy" copies every other format's audio.
+/// Opus is WebM's own native audio codec, encoded here through the libopus
+/// build_ffmpeg links in just for this.
 public struct VP9Engine: VideoEngine {
     private let runner: ProcessRunner
     private let helpers: HelperLocator
@@ -43,6 +50,7 @@ public struct VP9Engine: VideoEngine {
             "-crf", "\(VideoQualityMapping.crf(for: request.quality))",
             "-cpu-used", "\(VP9Mapping.cpuUsed(for: request.step))",
             "-row-mt", "1",
+            "-c:a", "libopus",
         ]
 
         let output = try await SafeOutput.write(to: request.destination, fileExtension: format.fileExtension) { temporary in

@@ -1125,9 +1125,12 @@ build_libvpx() {
 # --disable-gpl --disable-nonfree so x264, x265 and fdk-aac can never be pulled
 # in even by accident; both are already the configure default, kept explicit
 # here for the same reason every other engine's argument arrays are explicit.
-# No audio encoder is linked in at all: Tamp's video jobs always copy audio,
-# subtitle and metadata streams (-c copy) rather than re-encoding them, so
-# there's nothing here for libopus/LAME/etc. to do.
+# Tamp's video jobs copy audio, subtitle and metadata streams (-c copy) rather
+# than re-encoding them, for every format except VP9: WebM (VP9's container)
+# has no support for AAC, the audio codec Tamp's own source videos use, so
+# VP9Engine re-encodes just the audio track to Opus instead of copying it -
+# the one place a video job needs an audio encoder, hence --enable-libopus
+# (the same libopus build_opus already built for Phase 3's OpusEngine).
 build_ffmpeg() {
   built ffmpeg "$FFMPEG_VERSION" && return
   local dir="$SRC/ffmpeg-$FFMPEG_VERSION"
@@ -1147,7 +1150,7 @@ build_ffmpeg() {
         --extra-ldflags="-arch $arch -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -L$DEPS/lib" \
         --disable-shared --enable-static --enable-pic \
         --disable-gpl --disable-nonfree \
-        --enable-videotoolbox --enable-libsvtav1 --enable-libvpx \
+        --enable-videotoolbox --enable-libsvtav1 --enable-libvpx --enable-libopus \
         --disable-doc --disable-htmlpages --disable-manpages --disable-podpages --disable-txtpages \
         --disable-debug >/dev/null
       make -j"$JOBS" >/dev/null

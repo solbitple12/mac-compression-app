@@ -7,10 +7,11 @@ enum FFmpegConversion {
     static let helperName = "ffmpeg"
 
     /// Runs ffmpeg with `codecArguments` inserted right after `-c copy`, so they
-    /// override just the video stream's codec; every other stream (audio,
-    /// subtitles, attachments, chapters, container metadata) stays copied
-    /// unchanged, matching the architecture plan's "-map 0 and -c copy unless
-    /// the user changes them" - Tamp's video jobs only ever touch the picture.
+    /// override just what they name; by default that's only the video stream's
+    /// codec, and every other stream (audio, subtitles, attachments, chapters,
+    /// container metadata) stays copied unchanged, matching the architecture
+    /// plan's "-map 0 and -c copy unless the user changes them". VP9Engine is
+    /// the one exception, also overriding the audio codec: see its own doc comment.
     static func run(
         runner: ProcessRunner, ffmpeg: URL, source: URL, destination: URL, codecArguments: [String],
         progress: @escaping ProgressHandler

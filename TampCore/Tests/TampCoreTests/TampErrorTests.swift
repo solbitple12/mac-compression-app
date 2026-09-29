@@ -19,12 +19,16 @@ final class TampErrorTests: XCTestCase {
         XCTAssertEqual(error.errorDescription, "7zz stopped with error code 7: Command Line Error:")
     }
 
-    /// ffmpeg's stderr is mostly chatter that appears on every run, success or
-    /// failure alike: a version/build banner, then "Input #0 ..."/stream mapping
-    /// as it opens files. Unlike 7zz's short, front-loaded errors, ffmpeg prints
-    /// its fatal error last, right before exiting with nothing after it - so the
-    /// real error has to be found from the end, not skipped past from the start.
-    func testFfmpegErrorIsReadFromTheEnd() {
+    /// ffmpeg's stderr is almost entirely routine chatter that appears on every
+    /// run, success or failure alike: a version/build banner, "Input #0 .../
+    /// Stream #.../Output #0 .../Stream mapping:/Press [q] to stop" as it opens
+    /// files, then periodic and final "frame=..." progress stats, then, if
+    /// transcoding had started before failing, a generic "Conversion failed!"
+    /// trailer (ffmpeg_cleanup(), fftools/ffmpeg.c). Unlike 7zz's short,
+    /// front-loaded errors, ffmpeg's real, specific error is logged somewhere
+    /// before all of that routine noise, not after it - so this has to read
+    /// backwards past every known noise pattern, not just skip past the front.
+    func testFfmpegErrorIsFoundPastAllTheRoutineNoise() {
         let standardError = """
         ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers
           built with Apple clang version 17.0.0
@@ -33,21 +37,11 @@ final class TampErrorTests: XCTestCase {
           libavcodec     61. 24.100 / 61. 24.100
         Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'clip.mp4':
           Stream #0:0: Video: h264 (avc1 / 0x31637661), yuv420p, 160x120, 15 fps
-        Unknown encoder 'libvpx-vp9'
-        """
-        let error = TampError.classify(tool: "ffmpeg", exitCode: 1, standardError: standardError)
-        XCTAssertEqual(error, .toolFailed(tool: "ffmpeg", exitCode: 1, message: "Unknown encoder 'libvpx-vp9'"))
-    }
-
-    /// ffmpeg_cleanup() (fftools/ffmpeg.c) always logs one more generic
-    /// "Conversion failed!" line after the real, specific error, whenever
-    /// transcoding had started before failing - that trailer must be skipped
-    /// too, or it shadows the actually useful line right before it.
-    func testFfmpegGenericTrailerIsSkipped() {
-        let standardError = """
-        ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers
-        Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'clip.mp4':
         [libvpx-vp9 @ 0x600] Invalid CQ level 200, valid range is [0, 63]
+        Stream mapping:
+          Stream #0:0 -> #0:0 (h264 (native) -> vp9 (libvpx-vp9))
+        Press [q] to stop, [?] for help
+        frame=    0 fps=0.0 q=0.0 Lsize=       0KiB time=00:00:00.60 bitrate=   0.0kbits/s speed=76.8x
         Conversion failed!
         """
         let error = TampError.classify(tool: "ffmpeg", exitCode: 1, standardError: standardError)
