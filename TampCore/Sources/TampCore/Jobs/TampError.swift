@@ -114,11 +114,24 @@ extension TampError {
         // on success; skip those so a real failure further down isn't hidden behind
         // banner noise. SVT's own errors and warnings use the same prefix with a
         // different tag ("Svt[error]:", "Svt[warning]:") and are kept.
+        //
+        // ffmpeg does the same on every run, always to stderr, always before any
+        // real error: an unindented "ffmpeg version ..." line (traced against
+        // ffmpeg's own show_banner()/print_program_info() in fftools/opt_common.c),
+        // then several indented lines ("built with", "configuration:", one or two
+        // per linked library) that this function's own trimming already strips the
+        // indentation from, so they're matched by their fixed text instead.
+        let ffmpegBannerPrefixes = [
+            "ffmpeg version ", "built with ", "configuration: ",
+            "libavutil", "libavcodec", "libavformat", "libavdevice", "libavfilter", "libswscale", "libswresample",
+        ]
         let firstLine = standardError
             .split(whereSeparator: \.isNewline)
             .lazy
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty && !$0.hasPrefix("Svt[info]:") } ?? ""
+            .first { line in
+                !line.isEmpty && !line.hasPrefix("Svt[info]:") && !ffmpegBannerPrefixes.contains { line.hasPrefix($0) }
+            } ?? ""
         return .toolFailed(tool: tool, exitCode: exitCode, message: String(firstLine.prefix(200)))
     }
 }
