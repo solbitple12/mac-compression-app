@@ -5,16 +5,19 @@ import Foundation
 public enum OpusMapping {
     public static func kilobitsPerSecond(for value: MediaQuality) -> Int {
         switch value {
-        case .lossless: 192
+        case .lossless: return 192
         case let .preset(preset):
             switch preset {
-            case .low: 48
-            case .medium: 80
-            case .high: 128
-            case .veryHigh: 192
+            case .low: return 48
+            case .medium: return 80
+            case .high: return 128
+            case .veryHigh: return 192
             }
-        case let .customBitrate(kbps): max(6, kbps)
-        case let .customQuality(percent): Int(48 + (192 - 48) * (min(100, max(0, percent)) / 100))
+        case let .customBitrate(kbps): return max(6, kbps)
+        case let .customQuality(percent):
+            let clamped: Double = min(100, max(0, percent))
+            let value: Double = 48 + (192 - 48) * (clamped / 100)
+            return Int(value)
         }
     }
 }

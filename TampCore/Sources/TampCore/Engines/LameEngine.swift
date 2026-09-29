@@ -6,16 +6,19 @@ import Foundation
 public enum LameMapping {
     public static func vbrQuality(for value: MediaQuality) -> Int {
         switch value {
-        case .lossless: 0 // MP3 has no lossless mode; "lossless" here just means "best".
+        case .lossless: return 0 // MP3 has no lossless mode; "lossless" here just means "best".
         case let .preset(preset):
             switch preset {
-            case .low: 7
-            case .medium: 4
-            case .high: 2
-            case .veryHigh: 0
+            case .low: return 7
+            case .medium: return 4
+            case .high: return 2
+            case .veryHigh: return 0
             }
-        case let .customQuality(percent): 9 - Int((min(100, max(0, percent)) / 100 * 9).rounded())
-        case .customBitrate: 2 // LAME's -V has no direct bitrate target; falls back to High.
+        case let .customQuality(percent):
+            let clamped: Double = min(100, max(0, percent))
+            let scale: Double = (clamped / 100 * 9).rounded()
+            return 9 - Int(scale)
+        case .customBitrate: return 2 // LAME's -V has no direct bitrate target; falls back to High.
         }
     }
 }

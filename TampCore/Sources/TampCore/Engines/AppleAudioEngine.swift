@@ -69,16 +69,19 @@ enum AppleAudioConversion {
     /// AAC-only.
     static func aacBitsPerSecond(for value: MediaQuality) -> Int {
         switch value {
-        case .lossless: 256_000
+        case .lossless: return 256_000
         case let .preset(preset):
             switch preset {
-            case .low: 96_000
-            case .medium: 128_000
-            case .high: 192_000
-            case .veryHigh: 256_000
+            case .low: return 96_000
+            case .medium: return 128_000
+            case .high: return 192_000
+            case .veryHigh: return 256_000
             }
-        case let .customBitrate(kbps): max(32, kbps) * 1000
-        case let .customQuality(percent): Int(32_000 + (256_000 - 32_000) * (min(100, max(0, percent)) / 100))
+        case let .customBitrate(kbps): return max(32, kbps) * 1000
+        case let .customQuality(percent):
+            let clamped: Double = min(100, max(0, percent))
+            let value: Double = 32_000 + (256_000 - 32_000) * (clamped / 100)
+            return Int(value)
         }
     }
 
