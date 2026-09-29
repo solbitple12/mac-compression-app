@@ -140,9 +140,9 @@ OGG_COMMIT=be05b13e98b048f0b5a0f5fa8ce514d56db5f822
 # Neither has a vendored configure script in git (only in their release tarballs),
 # so their build runs autogen.sh: a real autoreconf bootstrap, the only one in
 # this script.
-LIBOPUSENC_VERSION=0.2.1
+LIBOPUSENC_VERSION=0.3
 LIBOPUSENC_GIT=https://github.com/xiph/libopusenc
-LIBOPUSENC_COMMIT=b19e1b14dee3e5245f2e37bfb193bde72fa70a2d
+LIBOPUSENC_COMMIT=0dba1bea736ab8bb811409dce80c994a00a2ced9
 
 OPUSFILE_VERSION=0.12
 OPUSFILE_GIT=https://github.com/xiph/opusfile
