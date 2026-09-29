@@ -22,6 +22,11 @@ final class AppModel {
     /// each with its own format and quality; empty unless every pending item
     /// qualifies, in which case `pendingAction` stays nil.
     private(set) var mediaItems: [MediaItem] = []
+    /// The largest single item's peak-memory estimate in `mediaItems`, since the
+    /// queue runs one job at a time; nil until the probe finishes. See
+    /// `scheduleMediaEstimate()`.
+    var mediaPeakMemoryBytes: UInt64?
+    @ObservationIgnored var mediaEstimateTask: Task<Void, Never>?
     /// Every job since launch, oldest first, until "Clear Finished".
     private(set) var jobs: [JobSnapshot] = []
 
@@ -180,15 +185,18 @@ final class AppModel {
         guard !pendingItems.isEmpty else {
             isCheckingItems = false
             mediaItems = []
+            mediaPeakMemoryBytes = nil
             return
         }
         // Extension checks only, no disk access, so this can run on the main actor.
         if let items = MediaBatch.items(for: pendingItems, registry: mediaRegistry) {
             mediaItems = items
             isCheckingItems = false
+            scheduleMediaEstimate()
             return
         }
         mediaItems = []
+        mediaPeakMemoryBytes = nil
         isCheckingItems = true
         let generation = checkGeneration
         let items = pendingItems
@@ -238,6 +246,41 @@ final class AppModel {
     func updateMediaItem(_ id: MediaItem.ID, _ change: (inout MediaItem) -> Void) {
         guard let index = mediaItems.firstIndex(where: { $0.id == id }) else { return }
         change(&mediaItems[index])
+        scheduleMediaEstimate()
+    }
+
+    /// Probes each pending media item's peak memory (video's probe reads the
+    /// source's real dimensions; image and audio are cheap enough to compute
+    /// directly) and keeps the largest, since the queue runs one job at a time.
+    /// A source Tamp fails to read falls back to an HD-sized guess rather than
+    /// blocking the estimate on one bad file.
+    func scheduleMediaEstimate() {
+        mediaEstimateTask?.cancel()
+        guard !mediaItems.isEmpty else {
+            mediaPeakMemoryBytes = nil
+            return
+        }
+        let items = mediaItems
+        mediaEstimateTask = Task { [weak self] in
+            var peak: UInt64 = 0
+            for item in items {
+                guard !Task.isCancelled else { return }
+                let bytes: UInt64
+                switch item.target {
+                case let .image(format):
+                    bytes = (try? ImageMemoryHint.peakMemoryBytes(source: item.source, format: format))
+                        ?? ImageMemoryHint.peakMemoryBytes(format: format, pixelWidth: 1920, pixelHeight: 1080)
+                case let .audio(format):
+                    bytes = AudioMemoryHint.peakMemoryBytes(format: format)
+                case let .video(format):
+                    bytes = (try? await VideoMemoryHint.peakMemoryBytes(source: item.source, format: format, step: item.step))
+                        ?? VideoMemoryHint.peakMemoryBytes(format: format, step: item.step, pixelWidth: 1920, pixelHeight: 1080)
+                }
+                peak = max(peak, bytes)
+            }
+            guard !Task.isCancelled else { return }
+            self?.mediaPeakMemoryBytes = peak
+        }
     }
 
     /// The start button: runs the checks from the top (see `proceed()`).

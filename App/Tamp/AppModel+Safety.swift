@@ -25,12 +25,21 @@ extension AppModel {
         case memory(needed: UInt64, available: UInt64, fix: Preflight.MemoryFix)
         case disk(needed: Int64, free: Int64, volume: String)
         case longJob(Estimate)
+        /// A media batch's version of `.memory`: no per-format fix to offer yet
+        /// (see `scheduleMediaEstimate()`), and different wording since there's
+        /// no single format or thread count to name.
+        case mediaMemory(needed: UInt64, available: UInt64)
+        /// A media batch's version of `.disk`: each item writes its own file
+        /// rather than one archive, so the wording doesn't say "archive".
+        case mediaDisk(needed: Int64, free: Int64, volume: String)
 
         var id: String {
             switch self {
             case .memory: "memory"
             case .disk: "disk"
             case .longJob: "longJob"
+            case .mediaMemory: "mediaMemory"
+            case .mediaDisk: "mediaDisk"
             }
         }
     }
@@ -111,11 +120,8 @@ extension AppModel {
     /// launches: memory, then disk, then the long-job warning, then the Trash.
     func proceed() {
         guard canStart else { return }
-        // Media jobs don't have a peak-memory estimate to check yet (see
-        // VideoMemoryHint's doc comment); they skip straight to launch the
-        // same way extracting already does.
         guard mediaItems.isEmpty else {
-            launchMediaBatch()
+            proceedWithMediaBatch()
             return
         }
         guard let action = pendingAction else { return }
@@ -168,6 +174,33 @@ extension AppModel {
 
     private var pendingItemsForCompress: [URL]? {
         if case let .compress(items)? = pendingAction { items } else { nil }
+    }
+
+    /// The media batch's own, simpler version of `proceed()`'s checks: memory
+    /// (once the probe in `scheduleMediaEstimate()` finishes), then disk, no
+    /// long-job or Trash question yet. No fix is offered for memory, since a
+    /// batch can mix formats with no one step or thread count to lower.
+    private func proceedWithMediaBatch() {
+        if !approvals.contains(.memory), let needed = mediaPeakMemoryBytes {
+            let available = SystemResources.availableMemory()
+            if Preflight.memoryProblem(peakMemoryBytes: needed, availableMemoryBytes: available, settings: safety) != nil {
+                startQuestion = .mediaMemory(needed: needed, available: available)
+                return
+            }
+        }
+        if !approvals.contains(.disk), let firstItem = mediaItems.first {
+            // Items are usually dropped from the same folder; the first item's
+            // volume stands in for all of them rather than checking each one.
+            let destination = firstItem.source.deletingLastPathComponent()
+            let outputBytes = mediaItems.reduce(Int64(0)) { $0 + InputSize.totalBytes(of: [$1.source]) }
+            if case let .disk(needed, free, volume)? = Preflight.diskProblem(
+                outputBytes: outputBytes, verifyBytes: 0, destination: destination, settings: safety
+            ) {
+                startQuestion = .mediaDisk(needed: needed, free: free, volume: volume)
+                return
+            }
+        }
+        launchMediaBatch()
     }
 
     private func findFasterOption(engine: any ArchiveEngine) {

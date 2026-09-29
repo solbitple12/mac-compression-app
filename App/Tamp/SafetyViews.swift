@@ -52,6 +52,18 @@ struct StartQuestionView: View {
                     Text("Even Fastest takes longer than that.").foregroundStyle(.secondary)
                 }
                 buttons(continueTitle: "Start Anyway", approval: .longJob)
+            case let .mediaMemory(needed, available):
+                Text("This batch may need more memory than is free")
+                    .font(.headline)
+                Text("It could use about \(EstimateText.memory(needed)), and \(EstimateText.memory(available)) is free. Other apps may slow down, and Tamp will pause a job if memory runs out.")
+                    .fixedSize(horizontal: false, vertical: true)
+                buttons(continueTitle: "Continue Anyway", approval: .memory)
+            case let .mediaDisk(needed, free, volume):
+                Text("“\(volume)” may run out of space")
+                    .font(.headline)
+                Text("These files and a safety margin need up to \(EstimateText.file(needed)), and \(EstimateText.file(free)) is free. If space runs short, Tamp pauses the batch and asks what to do.")
+                    .fixedSize(horizontal: false, vertical: true)
+                buttons(continueTitle: "Continue Anyway", approval: .disk)
             }
         }
         .padding(20)
