@@ -120,15 +120,18 @@ extension TampError {
             // failure alike: the version/build banner (traced against ffmpeg's own
             // show_banner()/print_program_info() in fftools/opt_common.c), then
             // "Input #0 ..."/stream mapping/"Output #0 ..." lines as it opens the
-            // files, then per-frame progress. A fatal error is the last thing
-            // ffmpeg prints before it exits, with nothing after it, so this reads
-            // from the end instead of the start, skipping only truly empty lines.
+            // files, then per-frame progress. The real, specific error is the last
+            // thing ffmpeg logs at the point of failure - except ffmpeg_cleanup()
+            // (fftools/ffmpeg.c) then logs one more generic line after it, always
+            // the same text, whenever transcoding had started before failing, so
+            // that generic trailer is skipped too rather than shadowing the
+            // specific line right before it.
             let lastLine = standardError
                 .split(whereSeparator: \.isNewline)
                 .reversed()
                 .lazy
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .first { !$0.isEmpty } ?? ""
+                .first { !$0.isEmpty && $0 != "Conversion failed!" } ?? ""
             return .toolFailed(tool: tool, exitCode: exitCode, message: String(lastLine.prefix(200)))
         }
         let firstLine = standardError

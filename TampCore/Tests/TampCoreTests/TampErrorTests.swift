@@ -39,6 +39,21 @@ final class TampErrorTests: XCTestCase {
         XCTAssertEqual(error, .toolFailed(tool: "ffmpeg", exitCode: 1, message: "Unknown encoder 'libvpx-vp9'"))
     }
 
+    /// ffmpeg_cleanup() (fftools/ffmpeg.c) always logs one more generic
+    /// "Conversion failed!" line after the real, specific error, whenever
+    /// transcoding had started before failing - that trailer must be skipped
+    /// too, or it shadows the actually useful line right before it.
+    func testFfmpegGenericTrailerIsSkipped() {
+        let standardError = """
+        ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers
+        Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'clip.mp4':
+        [libvpx-vp9 @ 0x600] Invalid CQ level 200, valid range is [0, 63]
+        Conversion failed!
+        """
+        let error = TampError.classify(tool: "ffmpeg", exitCode: 1, standardError: standardError)
+        XCTAssertEqual(error, .toolFailed(tool: "ffmpeg", exitCode: 1, message: "[libvpx-vp9 @ 0x600] Invalid CQ level 200, valid range is [0, 63]"))
+    }
+
     func testWrapsSystemErrors() {
         XCTAssertEqual(TampError(CancellationError()), .cancelled)
         XCTAssertEqual(TampError(POSIXError(.ENOSPC)), .diskFull)
