@@ -19,21 +19,24 @@ final class TampErrorTests: XCTestCase {
         XCTAssertEqual(error.errorDescription, "7zz stopped with error code 7: Command Line Error:")
     }
 
-    /// ffmpeg always prints its own version and build banner to stderr before
-    /// anything else, on every run, success or failure; the real error must
-    /// surface past it the same way a real SVT-AV1 error surfaces past its banner.
-    func testFfmpegBannerIsSkipped() {
+    /// ffmpeg's stderr is mostly chatter that appears on every run, success or
+    /// failure alike: a version/build banner, then "Input #0 ..."/stream mapping
+    /// as it opens files. Unlike 7zz's short, front-loaded errors, ffmpeg prints
+    /// its fatal error last, right before exiting with nothing after it - so the
+    /// real error has to be found from the end, not skipped past from the start.
+    func testFfmpegErrorIsReadFromTheEnd() {
         let standardError = """
         ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers
           built with Apple clang version 17.0.0
           configuration: --prefix=/usr --enable-videotoolbox --enable-libsvtav1
           libavutil      59. 23.100 / 59. 23.100
           libavcodec     61. 24.100 / 61. 24.100
-        Unrecognized option 'nonexistent-flag'.
-        Error splitting the argument list: Option not found
+        Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'clip.mp4':
+          Stream #0:0: Video: h264 (avc1 / 0x31637661), yuv420p, 160x120, 15 fps
+        Unknown encoder 'libvpx-vp9'
         """
         let error = TampError.classify(tool: "ffmpeg", exitCode: 1, standardError: standardError)
-        XCTAssertEqual(error, .toolFailed(tool: "ffmpeg", exitCode: 1, message: "Unrecognized option 'nonexistent-flag'."))
+        XCTAssertEqual(error, .toolFailed(tool: "ffmpeg", exitCode: 1, message: "Unknown encoder 'libvpx-vp9'"))
     }
 
     func testWrapsSystemErrors() {
