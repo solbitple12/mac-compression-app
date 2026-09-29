@@ -11,6 +11,12 @@ extension AppModel {
         var format: ArchiveFormat
     }
 
+    /// One running media item, kept while it runs so a paused one can be restarted.
+    struct MediaJob {
+        var item: MediaItem
+        var destination: URL
+    }
+
     /// Checks already answered for the job about to start.
     struct StartApproval: OptionSet {
         let rawValue: Int
@@ -49,10 +55,12 @@ extension AppModel {
         var estimate: Estimate
     }
 
-    /// Restarting paused jobs with lower settings: one step down and half the threads.
+    /// Restarting paused jobs with lower settings: one step down and half the
+    /// threads for an archive job; media has no thread count, so `threads` is
+    /// nil there, and only a video item has a step that changes its memory estimate.
     struct RestartOption {
         var step: SpeedStep
-        var threads: Int
+        var threads: Int?
         var memory: UInt64
     }
 
@@ -248,6 +256,9 @@ extension AppModel {
         for id in compressJobs.keys where !jobs.contains(where: { $0.id == id && !$0.state.isFinal }) {
             compressJobs[id] = nil
         }
+        for id in mediaJobs.keys where !jobs.contains(where: { $0.id == id && !$0.state.isFinal }) {
+            mediaJobs[id] = nil
+        }
         if let stop = status.automaticStop {
             let count = stop.jobs.count
             automaticStopSummary = "\(stop.reason), and nobody answered, so Tamp stopped \(count == 1 ? "the job" : "\(count) jobs") safely. "
@@ -272,34 +283,60 @@ extension AppModel {
         Task { await monitor.stopPausedJobs() }
     }
 
-    /// One step down and half the threads, for the first paused compress job.
+    /// One step down and half the threads, for the first paused compress job -
+    /// or, for a paused media batch, one step down for the first paused video
+    /// item (image and audio's memory estimate doesn't change with step, so
+    /// there's no lower-memory step to offer those).
     var restartOption: RestartOption? {
-        guard let id = resourceStatus.pausedJobs.first(where: { compressJobs[$0] != nil }),
-              let job = compressJobs[id], let engine = registry.engine(for: job.format) else { return nil }
-        let step = SpeedStep(rawValue: max(SpeedStep.fastest.rawValue, job.request.step.rawValue - 1)) ?? .fastest
-        let threads = max(1, job.request.options.threads / 2)
-        var options = job.request.options
-        options.threads = threads
-        return RestartOption(step: step, threads: threads, memory: engine.hint(for: step, options: options).peakMemoryBytes)
+        if let id = resourceStatus.pausedJobs.first(where: { compressJobs[$0] != nil }),
+           let job = compressJobs[id], let engine = registry.engine(for: job.format) {
+            let step = SpeedStep(rawValue: max(SpeedStep.fastest.rawValue, job.request.step.rawValue - 1)) ?? .fastest
+            let threads = max(1, job.request.options.threads / 2)
+            var options = job.request.options
+            options.threads = threads
+            return RestartOption(step: step, threads: threads, memory: engine.hint(for: step, options: options).peakMemoryBytes)
+        }
+        if let id = resourceStatus.pausedJobs.first(where: { mediaJobs[$0] != nil }), let job = mediaJobs[id],
+           case let .video(format) = job.item.target, job.item.step > .fastest {
+            let step = SpeedStep(rawValue: job.item.step.rawValue - 1) ?? .fastest
+            // The real dimensions aren't kept around after scheduleMediaEstimate()
+            // finishes; an HD-sized guess matches that estimate's own fallback.
+            let memory = VideoMemoryHint.peakMemoryBytes(format: format, step: step, pixelWidth: 1920, pixelHeight: 1080)
+            return RestartOption(step: step, threads: nil, memory: memory)
+        }
+        return nil
     }
 
-    /// Stops the paused jobs and starts each compress job again with lower settings.
+    /// Stops the paused jobs and starts each one again with lower settings.
     func restartPausedJobs() {
         guard let option = restartOption else { return }
-        let restarts = resourceStatus.pausedJobs.compactMap { compressJobs[$0] }.map { job -> CompressJob in
-            var job = job
-            job.request.step = option.step
-            job.request.options.threads = option.threads
-            return job
-        }
+        let paused = resourceStatus.pausedJobs
         let monitor = monitor
         let queue = queue
-        let paused = resourceStatus.pausedJobs
+        if paused.contains(where: { compressJobs[$0] != nil }) {
+            let restarts = paused.compactMap { compressJobs[$0] }.map { job -> CompressJob in
+                var job = job
+                job.request.step = option.step
+                job.request.options.threads = option.threads ?? job.request.options.threads
+                return job
+            }
+            Task { [weak self] in
+                await monitor.stopPausedJobs()
+                // The stopped jobs remove their partial output before the name is free again.
+                for id in paused { _ = await queue.waitUntilDone(id) }
+                for job in restarts { self?.enqueueCompress(job, estimate: nil) }
+            }
+            return
+        }
+        let restarts = paused.compactMap { mediaJobs[$0] }.map { job -> MediaJob in
+            var job = job
+            job.item.step = option.step
+            return job
+        }
         Task { [weak self] in
             await monitor.stopPausedJobs()
-            // The stopped jobs remove their partial output before the name is free again.
             for id in paused { _ = await queue.waitUntilDone(id) }
-            for job in restarts { self?.enqueueCompress(job, estimate: nil) }
+            for job in restarts { self?.enqueueMediaItem(job.item, destination: job.destination) }
         }
     }
 

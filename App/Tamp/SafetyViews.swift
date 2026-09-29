@@ -101,7 +101,7 @@ struct PausedJobsView: View {
             }
             HStack {
                 if let option = model.restartOption {
-                    Button("Restart at \(option.step.title), \(option.threads) thread\(option.threads == 1 ? "" : "s")") {
+                    Button(restartTitle(option)) {
                         model.restartPausedJobs()
                     }
                     .help("About \(EstimateText.memory(option.memory)) of memory")
@@ -117,6 +117,13 @@ struct PausedJobsView: View {
         }
         .padding(20)
         .frame(width: 440, alignment: .leading)
+    }
+
+    /// "Restart at Fast, 2 threads" for an archive job, "Restart at Fast" for
+    /// a media item, which has no thread count.
+    private func restartTitle(_ option: AppModel.RestartOption) -> String {
+        guard let threads = option.threads else { return "Restart at \(option.step.title)" }
+        return "Restart at \(option.step.title), \(threads) thread\(threads == 1 ? "" : "s")"
     }
 }
 

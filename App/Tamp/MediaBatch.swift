@@ -25,6 +25,14 @@ struct MediaItem: Identifiable, Equatable {
         }
     }
 
+    var fileExtension: String {
+        switch target {
+        case let .image(format): format.fileExtension
+        case let .audio(format): format.fileExtension
+        case let .video(format): format.fileExtension
+        }
+    }
+
     /// Builds a media item for a dropped file, with a sensible default target
     /// format from this build's available engines - or nil if the file isn't
     /// a recognized media source, or this build has no engine for its kind yet.

@@ -57,6 +57,8 @@ final class AppModel {
     @ObservationIgnored var approvals: StartApproval = []
     /// What each running compress job was asked to do, so the pause dialog can restart it with lower settings.
     @ObservationIgnored var compressJobs: [JobID: CompressJob] = [:]
+    /// The media-batch version of `compressJobs`.
+    @ObservationIgnored var mediaJobs: [JobID: MediaJob] = [:]
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
     @ObservationIgnored private var cleanupTask: Task<Void, Never>?
     /// Bumped whenever the pending items change, so a check that finishes late is ignored.
@@ -328,26 +330,39 @@ final class AppModel {
         let items = mediaItems
         clearPendingItems()
         startQuestion = nil
+        for item in items { enqueueMediaItem(item) }
+    }
+
+    /// Enqueues one media item, remembering it for a restart. `destination`
+    /// lets a restart reuse the name a paused job already reserved, rather
+    /// than resolving a fresh "Name N.ext" that may no longer match.
+    func enqueueMediaItem(_ item: MediaItem, destination: URL? = nil) {
         let registry = mediaRegistry
         let queue = queue
         let willWrite = outputFolderHandler
-        for item in items {
-            switch item.target {
-            case let .image(format):
-                guard let engine = registry.imageEngine(for: format) else { continue }
-                let destination = MediaPlanner.destination(for: item.source, fileExtension: format.fileExtension)
-                let request = ImageCompressRequest(source: item.source, destination: destination, format: format, step: item.step, quality: item.quality)
-                Task { await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite) }
-            case let .audio(format):
-                guard let engine = registry.audioEngine(for: format) else { continue }
-                let destination = MediaPlanner.destination(for: item.source, fileExtension: format.fileExtension)
-                let request = AudioCompressRequest(source: item.source, destination: destination, format: format, step: item.step, quality: item.quality)
-                Task { await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite) }
-            case let .video(format):
-                guard let engine = registry.videoEngine(for: format) else { continue }
-                let destination = MediaPlanner.destination(for: item.source, fileExtension: format.fileExtension)
-                let request = VideoCompressRequest(source: item.source, destination: destination, format: format, step: item.step, quality: item.quality)
-                Task { await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite) }
+        let resolvedDestination = destination ?? MediaPlanner.destination(for: item.source, fileExtension: item.fileExtension)
+        let mediaJob = MediaJob(item: item, destination: resolvedDestination)
+        switch item.target {
+        case let .image(format):
+            guard let engine = registry.imageEngine(for: format) else { return }
+            let request = ImageCompressRequest(source: item.source, destination: resolvedDestination, format: format, step: item.step, quality: item.quality)
+            Task { [weak self] in
+                let id = await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
+                self?.mediaJobs[id] = mediaJob
+            }
+        case let .audio(format):
+            guard let engine = registry.audioEngine(for: format) else { return }
+            let request = AudioCompressRequest(source: item.source, destination: resolvedDestination, format: format, step: item.step, quality: item.quality)
+            Task { [weak self] in
+                let id = await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
+                self?.mediaJobs[id] = mediaJob
+            }
+        case let .video(format):
+            guard let engine = registry.videoEngine(for: format) else { return }
+            let request = VideoCompressRequest(source: item.source, destination: resolvedDestination, format: format, step: item.step, quality: item.quality)
+            Task { [weak self] in
+                let id = await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
+                self?.mediaJobs[id] = mediaJob
             }
         }
     }
