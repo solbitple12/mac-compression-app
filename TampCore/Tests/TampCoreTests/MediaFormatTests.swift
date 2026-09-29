@@ -53,5 +53,19 @@ final class MediaFormatTests: XCTestCase {
         let registry = MediaEngineRegistry()
         XCTAssertTrue(registry.availableImageFormats.isEmpty)
         XCTAssertTrue(registry.availableAudioFormats.isEmpty)
+        XCTAssertTrue(registry.availableVideoFormats.isEmpty)
+    }
+
+    func testVideoFormatIsDetectedByExtension() {
+        XCTAssertEqual(MediaEngineRegistry.videoFormat(of: URL(fileURLWithPath: "/clip.webm")), .vp9)
+        // MP4/MOV/MKV can each hold several codecs, so the extension alone
+        // can't say which: these are re-encode sources, never a detected target.
+        XCTAssertNil(MediaEngineRegistry.videoFormat(of: URL(fileURLWithPath: "/clip.mp4")))
+        XCTAssertNil(MediaEngineRegistry.videoFormat(of: URL(fileURLWithPath: "/clip.mov")))
+    }
+
+    func testVideoSavingsFractionFromResult() {
+        let result = VideoCompressResult(output: URL(fileURLWithPath: "/out.mp4"), inputBytes: 1000, outputBytes: 250)
+        XCTAssertEqual(result.savingsFraction, 0.75, accuracy: 0.0001)
     }
 }
