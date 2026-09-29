@@ -938,8 +938,11 @@ build_libopusenc() {
       # DEPS_CFLAGS/DEPS_LIBS short-circuit configure's PKG_CHECK_MODULES([DEPS],
       # [opus...]) lookup entirely, bypassing any confusion from a stray or
       # differently-resolved opus.pc: point straight at our own universal build.
-      DEPS_CFLAGS="-I$DEPS/include" DEPS_LIBS="-L$DEPS/lib -lopus" \
-        CC="clang -arch $arch" CFLAGS="-O2" CPPFLAGS="-I$DEPS/include" LDFLAGS="-L$DEPS/lib" \
+      # Opus installs its header as include/opus/opus.h but code includes it as
+      # the bare "opus.h" (see opus.pc.in's own "Cflags: -I${includedir}/opus"),
+      # so the search path needs the /opus subdirectory, not just $DEPS/include.
+      DEPS_CFLAGS="-I$DEPS/include/opus" DEPS_LIBS="-L$DEPS/lib -lopus" \
+        CC="clang -arch $arch" CFLAGS="-O2" CPPFLAGS="-I$DEPS/include -I$DEPS/include/opus" LDFLAGS="-L$DEPS/lib" \
         ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
         --disable-shared --enable-static --disable-doc >/dev/null
       make -j"$JOBS" >/dev/null
@@ -979,9 +982,10 @@ build_opusfile() {
       cd "$dir/build-$arch"
       export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig"
       # Same DEPS_CFLAGS/DEPS_LIBS short-circuit as build_libopusenc, covering
-      # opusfile's PKG_CHECK_MODULES([DEPS], [ogg opus]).
-      DEPS_CFLAGS="-I$DEPS/include" DEPS_LIBS="-L$DEPS/lib -logg -lopus" \
-        CC="clang -arch $arch" CFLAGS="-O2" CPPFLAGS="-I$DEPS/include" LDFLAGS="-L$DEPS/lib" \
+      # opusfile's PKG_CHECK_MODULES([DEPS], [ogg opus]). Needs $DEPS/include/opus
+      # too, for the same bare "opus.h" include reason as build_libopusenc.
+      DEPS_CFLAGS="-I$DEPS/include -I$DEPS/include/opus" DEPS_LIBS="-L$DEPS/lib -logg -lopus" \
+        CC="clang -arch $arch" CFLAGS="-O2" CPPFLAGS="-I$DEPS/include -I$DEPS/include/opus" LDFLAGS="-L$DEPS/lib" \
         ../configure --host="$(host_for "$arch")" --prefix="$prefix" \
         --disable-shared --enable-static --disable-http --disable-examples --disable-doc >/dev/null
       make -j"$JOBS" >/dev/null
@@ -1022,12 +1026,14 @@ build_opustools() {
       export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig"
       # Same DEPS_CFLAGS/DEPS_LIBS short-circuit as build_libopusenc and
       # build_opusfile, one per opus-tools' own PKG_CHECK_MODULES prefix.
+      # $DEPS/include/opus is needed wherever opus.h is pulled in (directly or
+      # via opusfile/opusenc's own headers), for the bare "opus.h" include.
       OGG_CFLAGS="-I$DEPS/include" OGG_LIBS="-L$DEPS/lib -logg" \
-        OPUS_CFLAGS="-I$DEPS/include" OPUS_LIBS="-L$DEPS/lib -lopus" \
-        OPUSFILE_CFLAGS="-I$DEPS/include" OPUSFILE_LIBS="-L$DEPS/lib -lopusfile -lopus -logg" \
-        OPUSURL_CFLAGS="-I$DEPS/include" OPUSURL_LIBS="-L$DEPS/lib -lopusurl -lopusfile -lopus -logg" \
-        LIBOPUSENC_CFLAGS="-I$DEPS/include" LIBOPUSENC_LIBS="-L$DEPS/lib -lopusenc -lopus" \
-        CC="clang -arch $arch" CFLAGS="-O2" CPPFLAGS="-I$DEPS/include" LDFLAGS="-L$DEPS/lib" \
+        OPUS_CFLAGS="-I$DEPS/include -I$DEPS/include/opus" OPUS_LIBS="-L$DEPS/lib -lopus" \
+        OPUSFILE_CFLAGS="-I$DEPS/include -I$DEPS/include/opus" OPUSFILE_LIBS="-L$DEPS/lib -lopusfile -lopus -logg" \
+        OPUSURL_CFLAGS="-I$DEPS/include -I$DEPS/include/opus" OPUSURL_LIBS="-L$DEPS/lib -lopusurl -lopusfile -lopus -logg" \
+        LIBOPUSENC_CFLAGS="-I$DEPS/include -I$DEPS/include/opus" LIBOPUSENC_LIBS="-L$DEPS/lib -lopusenc -lopus" \
+        CC="clang -arch $arch" CFLAGS="-O2" CPPFLAGS="-I$DEPS/include -I$DEPS/include/opus" LDFLAGS="-L$DEPS/lib" \
         ../configure --host="$(host_for "$arch")" --prefix="$prefix" --without-flac >/dev/null
       make -j"$JOBS" >/dev/null
       make install >/dev/null
