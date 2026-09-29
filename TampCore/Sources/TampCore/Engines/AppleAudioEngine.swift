@@ -36,7 +36,17 @@ enum AppleAudioConversion {
                         inputStatus.pointee = .endOfStream
                         return nil
                     }
-                    guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: frameCapacity) else {
+                    // Never ask for more frames than the file has left: some AVAudioFile
+                    // versions handle an over-sized request at the very end of the file
+                    // oddly rather than simply returning a short buffer.
+                    let remaining = AVAudioFrameCount(clamping: input.length - input.framePosition)
+                    guard remaining > 0 else {
+                        reachedInputEnd = true
+                        inputStatus.pointee = .endOfStream
+                        return nil
+                    }
+                    let toRead = min(frameCapacity, remaining)
+                    guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: toRead) else {
                         // Allocation failure won't fix itself on a retry either, so
                         // this ends the stream rather than asking the converter to
                         // call back again, which would loop forever.
@@ -45,7 +55,7 @@ enum AppleAudioConversion {
                         return nil
                     }
                     do {
-                        try input.read(into: inputBuffer, frameCount: frameCapacity)
+                        try input.read(into: inputBuffer, frameCount: toRead)
                     } catch {
                         // A read error, unlike "no data yet", won't resolve on a later
                         // call either: treating it as .noDataNow would have the
@@ -71,31 +81,52 @@ enum AppleAudioConversion {
                     try output.write(from: outputBuffer)
                 }
                 if status == .endOfStream {
-                    if let readError { throw TampError.other("Tamp couldn't read that audio file: \(readError.localizedDescription)") }
+                    if let readError {
+                        let underlying = readError as NSError
+                        throw TampError.other(
+                            "Tamp couldn't read that audio file: \(underlying.domain) code \(underlying.code): \(underlying.userInfo)"
+                        )
+                    }
                     break
                 }
             }
         }
     }
 
-    /// A preset-to-bitrate mapping for AAC, in bits per second. WavPack and FLAC
-    /// have no such control (always lossless); ALAC is lossless too, so this is
-    /// AAC-only.
-    static func aacBitsPerSecond(for value: MediaQuality) -> Int {
+    /// A preset-to-quality mapping for AAC. WavPack and FLAC have no such control
+    /// (always lossless); ALAC is lossless too, so this is AAC-only.
+    ///
+    /// `AVEncoderBitRateKey` with an exact kbps target failed inside AVFoundation's
+    /// own encoder setup ("AudioConverterSetProperty(kAudioConverterEncodeBitRate)")
+    /// for a mono, low-sample-rate source: the AAC encoder only accepts specific bit
+    /// rates for a given sample rate and channel count, discoverable only through the
+    /// AudioConverter AVAudioFile's write path builds and keeps internal to itself, so
+    /// there's no way to query or clamp to a valid value from here. `AVEncoderAudioQualityKey`
+    /// is a coarse tier the encoder always accepts, so this maps to that instead.
+    static func aacQuality(for value: MediaQuality) -> AVAudioQuality {
         switch value {
-        case .lossless: return 256_000
+        case .lossless: return .max
         case let .preset(preset):
             switch preset {
-            case .low: return 96_000
-            case .medium: return 128_000
-            case .high: return 192_000
-            case .veryHigh: return 256_000
+            case .low: return .low
+            case .medium: return .medium
+            case .high: return .high
+            case .veryHigh: return .max
             }
-        case let .customBitrate(kbps): return max(32, kbps) * 1000
+        case let .customBitrate(kbps):
+            switch kbps {
+            case ..<64: return .low
+            case 64..<128: return .medium
+            case 128..<224: return .high
+            default: return .max
+            }
         case let .customQuality(percent):
-            let clamped: Double = min(100, max(0, percent))
-            let value: Double = 32_000 + (256_000 - 32_000) * (clamped / 100)
-            return Int(value)
+            switch min(100, max(0, percent)) {
+            case ..<25: return .low
+            case 25..<50: return .medium
+            case 50..<75: return .high
+            default: return .max
+            }
         }
     }
 
@@ -143,7 +174,7 @@ public struct AACEngine: AudioEngine {
     public func compress(_ request: AudioCompressRequest, progress: @escaping ProgressHandler) async throws -> AudioCompressResult {
         try await AppleAudioConversion.compress(
             request, formatID: kAudioFormatMPEG4AAC,
-            extraSettings: [AVEncoderBitRateKey: AppleAudioConversion.aacBitsPerSecond(for: request.quality)],
+            extraSettings: [AVEncoderAudioQualityKey: AppleAudioConversion.aacQuality(for: request.quality).rawValue],
             progress: progress
         )
     }

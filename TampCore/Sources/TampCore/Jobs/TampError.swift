@@ -109,11 +109,16 @@ extension TampError {
                     "decompression failed", "file format not recognized", "integrity") {
             return .corruptArchive
         }
+        // avifenc's underlying SVT-AV1 encoder prints a multi-line "Svt[info]:" banner
+        // (version, build config, thread count) to stderr before anything else, even
+        // on success; skip those so a real failure further down isn't hidden behind
+        // banner noise. SVT's own errors and warnings use the same prefix with a
+        // different tag ("Svt[error]:", "Svt[warning]:") and are kept.
         let firstLine = standardError
             .split(whereSeparator: \.isNewline)
             .lazy
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty } ?? ""
+            .first { !$0.isEmpty && !$0.hasPrefix("Svt[info]:") } ?? ""
         return .toolFailed(tool: tool, exitCode: exitCode, message: String(firstLine.prefix(200)))
     }
 }
