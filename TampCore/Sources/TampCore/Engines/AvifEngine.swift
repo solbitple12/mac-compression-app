@@ -49,7 +49,7 @@ public struct AvifEngine: ImageEngine {
 
         let output = try await SafeOutput.write(to: request.destination, fileExtension: format.fileExtension) { temporary in
             progress(0)
-            var arguments = ["-s", "\(speed)", "-j", "all", "--quiet"]
+            var arguments = ["-s", "\(speed)", "-j", "all"]
             arguments += request.quality == .lossless ? ["--lossless"] : ["-q", "\(AvifMapping.quality(for: request.quality))"]
             arguments += [request.source.path, temporary.path]
             let result = try await runner.run(avifenc, arguments: arguments)

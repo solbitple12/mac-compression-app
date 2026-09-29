@@ -50,11 +50,11 @@ public struct FlacEngine: AudioEngine {
             defer { if source != request.source { try? FileManager.default.removeItem(at: source) } }
 
             // flac carries none of a WAV or AIFF source's own chunks into the FLAC by
-            // default; --keep-foreign-metadata-input is the one flag that does, so
+            // default; --keep-foreign-metadata is the one flag that does, so
             // that's what "keep" means here. There's no separate "location" tag in
             // audio metadata, so "strip location" and "strip all" are the same: don't ask for it.
             var arguments = ["-\(level)", "--totally-silent", "--force"]
-            if request.metadata == .keep { arguments.append("--keep-foreign-metadata-input") }
+            if request.metadata == .keep { arguments.append("--keep-foreign-metadata") }
             arguments += ["-o", temporary.path, source.path]
             let result = try await runner.run(flac, arguments: arguments)
             guard result.succeeded else {
