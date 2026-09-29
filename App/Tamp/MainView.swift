@@ -69,8 +69,8 @@ struct MainView: View {
             return model.mediaItems.count == 1 ? "Compress" : "Compress \(model.mediaItems.count)"
         }
         switch model.pendingAction {
-        case let .extract(archives): archives.count == 1 ? "Extract" : "Extract \(archives.count)"
-        case .compress, nil: "Compress"
+        case let .extract(archives): return archives.count == 1 ? "Extract" : "Extract \(archives.count)"
+        case .compress, nil: return "Compress"
         }
     }
 
