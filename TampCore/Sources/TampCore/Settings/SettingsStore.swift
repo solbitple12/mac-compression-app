@@ -64,6 +64,44 @@ public struct ArchiveChoice: Codable, Equatable, Sendable {
     }
 }
 
+/// A named archive setup, saved from the current choice and reapplied later.
+/// Threads, "check after compressing" and "move to Trash" stay the person's
+/// standing choice rather than part of the preset, since they're about the
+/// machine and the moment, not the format.
+public struct ArchivePreset: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var format: ArchiveFormat
+    public var step: SpeedStep
+    public var method: CompressionMethod?
+    public var advanced: AdvancedOptions
+    public var excludesMacOSJunk: Bool
+    public var volumeMebibytes: Int?
+
+    public init(id: UUID = UUID(), name: String, choice: ArchiveChoice) {
+        self.id = id
+        self.name = name
+        format = choice.format
+        step = choice.step
+        method = choice.method(for: choice.format)
+        advanced = choice.advanced
+        excludesMacOSJunk = choice.excludesMacOSJunk
+        volumeMebibytes = choice.volumeMebibytes
+    }
+
+    /// `choice` with this preset's format, step and format-specific settings applied.
+    public func apply(to choice: ArchiveChoice) -> ArchiveChoice {
+        var choice = choice
+        choice.format = format
+        choice.step = step
+        if let method { choice.setMethod(method, for: format) }
+        choice.advanced = advanced
+        choice.excludesMacOSJunk = excludesMacOSJunk
+        choice.volumeMebibytes = volumeMebibytes
+        return choice
+    }
+}
+
 /// The format, quality and metadata choice last used for each media kind
 /// (image, audio, video), restored at launch the way `ArchiveChoice` restores
 /// the last archive format and step. Nil until something of that kind has
@@ -107,6 +145,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let mediaChoice = "mediaChoice"
         static let recommendationGoal = "recommendationGoal"
         static let safetySettings = "safetySettings"
+        static let presets = "presets"
         static let recentOutputDirectories = "recentOutputDirectories"
         static let unfinishedBatch = "unfinishedBatch"
     }
@@ -146,6 +185,12 @@ public final class SettingsStore: @unchecked Sendable {
     public var safetySettings: SafetySettings {
         get { decode(SafetySettings.self, forKey: Key.safetySettings) ?? SafetySettings() }
         set { encode(newValue, forKey: Key.safetySettings) }
+    }
+
+    /// Named archive setups, in the order the person saved them.
+    public var presets: [ArchivePreset] {
+        get { decode([ArchivePreset].self, forKey: Key.presets) ?? [] }
+        set { encode(newValue, forKey: Key.presets) }
     }
 
     /// The saved choice, with the format swapped for the first available one

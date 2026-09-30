@@ -149,6 +149,8 @@ struct ArchiveSettingsView: View {
             .fixedSize()
             .accessibilityIdentifier("formatPicker")
 
+            PresetsMenu(model: model)
+
             if let method = model.method, !model.methods.isEmpty {
                 Picker("Method", selection: Binding(get: { method }, set: { model.select(method: $0) })) {
                     ForEach(model.methods, id: \.self) { candidate in

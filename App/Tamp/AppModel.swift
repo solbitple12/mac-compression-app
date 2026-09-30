@@ -94,6 +94,7 @@ final class AppModel {
         unfinishedBatch = settings.unfinishedBatch
         observeJobs()
         observeResources()
+        loadPresets()
     }
 
     // MARK: Format and speed
@@ -137,6 +138,33 @@ final class AppModel {
         choice.step = step
         settings.archiveChoice = choice
         scheduleEstimate()
+    }
+
+    // MARK: Presets
+
+    private(set) var presets: [ArchivePreset] = []
+
+    func loadPresets() {
+        presets = settings.presets
+    }
+
+    func applyPreset(_ preset: ArchivePreset) {
+        choice = preset.apply(to: choice)
+        settings.archiveChoice = choice
+        scheduleEstimate()
+    }
+
+    /// Ignores a blank name; trims surrounding whitespace from the rest.
+    func saveCurrentAsPreset(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        presets.append(ArchivePreset(name: trimmed, choice: choice))
+        settings.presets = presets
+    }
+
+    func deletePreset(_ preset: ArchivePreset) {
+        presets.removeAll { $0.id == preset.id }
+        settings.presets = presets
     }
 
     // MARK: Advanced settings

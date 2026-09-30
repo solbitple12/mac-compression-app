@@ -168,6 +168,29 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.longJobSeconds, SafetySettings().longJobSeconds)
     }
 
+    func testPresetsStartEmpty() {
+        XCTAssertEqual(store.presets, [])
+    }
+
+    func testPresetsAreRememberedInOrder() {
+        let choice = ArchiveChoice(format: .sevenZip, step: .best)
+        let preset = ArchivePreset(name: "Max Compression", choice: choice)
+        store.presets = [preset]
+        XCTAssertEqual(SettingsStore(defaults: defaults).presets, [preset])
+    }
+
+    func testPresetApplyKeepsTheRestOfTheChoice() {
+        var choice = ArchiveChoice(format: .zip, step: .fastest)
+        choice.verifies = true
+        choice.trashesOriginals = true
+        let preset = ArchivePreset(name: "Best 7Z", choice: ArchiveChoice(format: .sevenZip, step: .best))
+        let applied = preset.apply(to: choice)
+        XCTAssertEqual(applied.format, .sevenZip)
+        XCTAssertEqual(applied.step, .best)
+        XCTAssertTrue(applied.verifies)
+        XCTAssertTrue(applied.trashesOriginals)
+    }
+
     func testUnfinishedBatchIsRememberedUntilCleared() {
         XCTAssertEqual(store.unfinishedBatch, [])
         let archives = [URL(fileURLWithPath: "/tmp/a.zip"), URL(fileURLWithPath: "/tmp/b.7z")]
