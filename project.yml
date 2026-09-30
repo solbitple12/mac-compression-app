@@ -133,7 +133,9 @@ targets:
             NSExtensionServiceAllowsFinderPreviewItem: true
             NSExtensionServiceFinderPreviewLabel: Compress with Tamp
             NSExtensionServiceRoleType: NSExtensionServiceRoleTypeEditor
-            NSExtensionActivationRule: TRUEPREDICATE
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 100000
+              NSExtensionActivationSupportsFolderWithMaxCount: 100000
   TampUITests:
     type: bundle.ui-testing
     platform: macOS
