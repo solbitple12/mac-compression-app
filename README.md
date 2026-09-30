@@ -148,9 +148,10 @@ Memory figures in the slider hint are estimates. `tamp-bench` measures the real 
 
 ## Benchmark
 
-`scripts/make-bench-set.sh` writes a seeded 22 MB set (prose, CSV, JSON logs, binary
-records and the test corpus). `tamp-bench` compresses and extracts it with every format,
-step and method, and at several thread counts, in a child process per run, and reports
+`scripts/make-bench-set.sh` writes a seeded 27 MB set (prose, CSV, JSON logs, binary
+records, a larger incompressible chunk, 400 small files and the test corpus). `tamp-bench`
+compresses and extracts it with every format, step and method, and at several thread
+counts, in a child process per run, and reports
 ratio, time, speed, the largest helper's peak memory next to the hint's estimate, and
 adjacent steps that come out nearly identical. The Benchmark workflow runs it on a
 GitHub macOS runner by hand, or when the pull request is labeled `benchmark`.

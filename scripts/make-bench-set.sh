@@ -1,7 +1,8 @@
 #!/bin/bash
 # Writes the benchmark set to the folder given (default build/bench-set): about
-# 22 MB of seeded text, CSV, logs and binary records, plus the test corpus for
-# already-compressed media. Seeded, so every run benchmarks the same bytes.
+# 27 MB of seeded text, CSV, logs, binary records, many small files and a
+# larger incompressible chunk, plus the test corpus for already-compressed
+# media. Seeded, so every run benchmarks the same bytes.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,5 +48,22 @@ with open(os.path.join(out, "records.bin"), "wb") as f:
     for i in range(131072):
         f.write(i.to_bytes(4, "little") + rng.randint(0, 255).to_bytes(1, "little") * 8 + bytes(4))
     f.write(rng.randbytes(1 << 20))
+
+# Already-compressed video or photo libraries are mostly incompressible bytes;
+# a chunk this size (not just records.bin's 1 MB tail) shows that case's real
+# throughput and memory rather than being lost in the compressible files' bulk.
+with open(os.path.join(out, "incompressible.bin"), "wb") as f:
+    f.write(rng.randbytes(4 * 2**20))
+
+# A folder a photo or project export might look like: many small files, whose
+# per-file overhead the single large files above don't exercise (see
+# Estimator's own per-file sampling, TampCore/Sources/TampCore/Estimation/Estimator.swift).
+small_files = os.path.join(out, "many-small-files")
+os.makedirs(small_files, exist_ok=True)
+extensions = ["txt", "json", "log", "csv"]
+for i in range(400):
+    name = f"item-{i:04d}.{extensions[i % len(extensions)]}"
+    with open(os.path.join(small_files, name), "w") as f:
+        f.write(" ".join(sentence() for _ in range(rng.randint(1, 4))))
 PY
 du -sh "$out"
