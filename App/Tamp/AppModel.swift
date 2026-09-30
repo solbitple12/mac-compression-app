@@ -60,7 +60,8 @@ final class AppModel {
     var recommendationError: String?
 
     let settings: SettingsStore
-    private(set) var safety: SafetySettings
+    /// Set only through `updateSafety(_:)` (`AppModel+Safety.swift`), which also persists it and updates the monitor.
+    var safety: SafetySettings
     let queue: JobQueue
     let estimator: Estimator
     let monitor: ResourceMonitor
