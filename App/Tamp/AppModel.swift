@@ -546,7 +546,9 @@ final class AppModel {
 
     private func apply(_ snapshot: JobSnapshot) {
         if let index = jobs.firstIndex(where: { $0.id == snapshot.id }) {
+            let wasFinal = jobs[index].state.isFinal
             jobs[index] = snapshot
+            if !wasFinal, snapshot.state.isFinal { JobNotifications.notify(snapshot) }
         } else {
             // A job publishes nothing after its final state, so a cleared job never comes back.
             jobs.append(snapshot)
