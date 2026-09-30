@@ -31,6 +31,7 @@ targets:
       base:
         PRODUCT_NAME: Tamp
         PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.Tamp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Developer ID outside the App Store: hardened runtime on, no sandbox.
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
@@ -51,6 +52,7 @@ targets:
       path: Generated/Tamp-Info.plist
       properties:
         CFBundleDisplayName: Tamp
+        CFBundleIconName: AppIcon
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: "14.0"
         CFBundleDocumentTypes:
