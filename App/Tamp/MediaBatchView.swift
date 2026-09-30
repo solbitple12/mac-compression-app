@@ -51,7 +51,7 @@ struct MediaItemRow: View {
             .buttonStyle(.borderless)
             .disabled(model.isGeneratingPreview)
             .help("Preview a short clip with these settings")
-            .accessibilityLabel("Preview")
+            .accessibilityLabel("Preview \(fileName)")
         }
     }
 
@@ -66,6 +66,7 @@ struct MediaItemRow: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .accessibilityLabel("Metadata for \(fileName)")
         }
     }
 
@@ -87,6 +88,7 @@ struct MediaItemRow: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .accessibilityLabel("Format for \(fileName)")
         case .audio:
             Picker("Format", selection: audioFormat) {
                 ForEach(model.mediaRegistry.availableAudioFormats, id: \.self) { format in
@@ -95,6 +97,7 @@ struct MediaItemRow: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .accessibilityLabel("Format for \(fileName)")
         case .video:
             Picker("Format", selection: videoFormat) {
                 ForEach(model.mediaRegistry.availableVideoFormats, id: \.self) { format in
@@ -103,15 +106,18 @@ struct MediaItemRow: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .accessibilityLabel("Format for \(fileName)")
         }
     }
 
     @ViewBuilder
     private var qualityPicker: some View {
         if !isAlwaysLossless {
-            MediaQualityPicker(quality: quality, supportsLossless: supportsLossless)
+            MediaQualityPicker(quality: quality, supportsLossless: supportsLossless, accessibilityContext: fileName)
         }
     }
+
+    private var fileName: String { item.source.lastPathComponent }
 
     private var isAlwaysLossless: Bool {
         switch item.target {
@@ -175,6 +181,9 @@ struct MediaItemRow: View {
 struct MediaQualityPicker: View {
     @Binding var quality: MediaQuality
     var supportsLossless: Bool
+    /// The file name, read by VoiceOver so a batch of rows doesn't sound like
+    /// several identical unlabeled "Quality" controls.
+    var accessibilityContext: String
 
     private enum Choice: Hashable {
         case lossless
@@ -213,10 +222,11 @@ struct MediaQualityPicker: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .accessibilityLabel("Quality for \(accessibilityContext)")
             if case let .customQuality(value) = quality {
                 Slider(value: customValue(value), in: 0...100, step: 1)
                     .frame(width: 90)
-                    .accessibilityLabel("Custom quality")
+                    .accessibilityLabel("Custom quality for \(accessibilityContext)")
                     .accessibilityValue("\(Int(value.rounded()))")
                 Text("\(Int(value.rounded()))")
                     .font(.caption)

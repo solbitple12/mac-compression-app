@@ -120,9 +120,10 @@ struct JobRow: View {
             }
             .buttonStyle(.borderless)
             .help("Stop this job")
-            .accessibilityLabel("Stop")
+            .accessibilityLabel("Stop \(job.displayTitle)")
         } else if job.state == .finished, let output = job.output {
             Button("Show in Finder") { model.showInFinder(output) }
+                .accessibilityLabel("Show \(job.displayTitle) in Finder")
         }
     }
 }
