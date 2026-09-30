@@ -5,16 +5,17 @@ media re-encoding, and a "Recommend for me" mode. macOS 14+, Swift and SwiftUI,
 distributed as a notarized Developer ID app.
 
 Work in progress: Phases 1 through 3 (all archive formats, advanced options, estimates
-and safety checks, plus images and audio) are done. Phase 4's video codecs (H.264 and
-HEVC through VideoToolbox, AV1 through SVT-AV1, VP9 through libvpx, all via a bundled
-FFmpeg) are built too; the batch UI, clip preview and RAM estimates for all of Phase 3
-and 4 come next. `CLAUDE.md` has notes for working on it.
+and safety checks, plus images and audio) are done. Phase 4 (video codecs through a
+bundled FFmpeg, RAM estimates for every media kind, and a per-item batch panel with the
+same pre-flight memory/disk checks and paused-job restart archive jobs get) is done too.
+Clip preview and the Advanced panel's custom quality and bitrate controls for media are
+what's left before Phase 5. `CLAUDE.md` has notes for working on it.
 
 ## Layout
 
 | Path | What it holds |
 | --- | --- |
-| `App/Tamp/` | The SwiftUI app: main window, drop zone, format picker, speed slider, job list |
+| `App/Tamp/` | The SwiftUI app: main window, drop zone, archive format picker and speed slider, the per-item media batch panel (Phase 4), job list |
 | `project.yml` | XcodeGen spec for the app; `xcodegen generate` writes `Tamp.xcodeproj` |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping, for archives and (Phase 3/4) images, audio and video |
@@ -76,6 +77,16 @@ is written and checked. It also shows the tuning settings the chosen format has:
 7Z dictionary, word size, solid blocks, BCJ2 filter and file name encryption; ZIP
 encryption (AES-256 or ZipCrypto); threads; the TAR.ZST long-range window (at most
 128 MB); the TAR.XZ block size; the ZPAQ block size; and Brotli's 256 MB window.
+
+Dropping only images, only audio, only video, or a mix of those three kinds shows each
+file in its own row instead of the single archive-wide picker, with its own format,
+quality (or Lossless, where the format allows it) and metadata (Keep, Remove Location,
+Remove All) controls; starting the batch runs each item as its own independent job next
+to its original. Anything else dropped — a folder, an archive, or a mix that includes a
+non-media file — still bundles into one archive the usual way. The same pre-flight
+memory and disk checks archive jobs get cover a media batch too; a paused video item can
+restart one step down, though image and audio's memory estimate doesn't change with
+step, so there's nothing lower to offer those.
 
 ## Speed steps
 
@@ -177,6 +188,12 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
   version, same as AVIF.
 - VideoToolbox's constant-quality mode only works on Apple Silicon; on Intel, H.264 and
   HEVC fall back to a target bitrate instead, with no real per-step benchmark behind it yet.
+- A media batch's pre-flight memory check uses `ImageMemoryHint`, `AudioMemoryHint` and
+  `VideoMemoryHint`'s starting-point formulas, same as the slider hint's own estimates;
+  a source Tamp can't read its dimensions from falls back to an HD-sized guess.
+- Dropping a mix of media and non-media items (say, a photo alongside a folder) bundles
+  everything into one archive rather than splitting it into a media batch plus an
+  archive; only a drop that's entirely image, audio and video files gets the per-item panel.
 
 ## Bundled components and licenses
 
@@ -247,10 +264,20 @@ or 4:0:0, so AVIF "lossless" now means the best lossy quality (`-q 100`)
 instead, not a true pixel-for-pixel round trip the way JPEG XL's lossless JPEG
 path is.
 
-Still ahead: the batch UI, previews, per-file savings and metadata toggles in
-`App/Tamp` (nothing there has changed this phase yet), video's presets and
-advanced controls, clip preview, encoder RAM estimates (the Estimation layer
-is still archive-format-only, from Phase 2 — nothing in Phase 3 or 4 has wired
-image/audio/video jobs into it yet), and the benchmark pass that Phase 2a ran
-for archive formats, to replace the speed-step mappings above marked as
-starting points with real measurements.
+The per-item media batch panel followed: `MediaPlanner` classifies a drop by
+extension into image, audio or video (independent of `ArchivePlanner`'s
+archive/extract detection), `MediaJobs` puts each item on the same `JobQueue`
+archives use but one at a time rather than bundled, and `ImageMemoryHint` and
+`AudioMemoryHint` fill out the RAM-estimate formulas alongside `VideoMemoryHint`
+so `AppModel`'s pre-flight memory and disk checks (previously archive-only)
+cover a media batch too, with its own paused-job restart for video (the only
+kind whose memory estimate changes with step).
+
+Still ahead: clip preview has no UI yet (`VideoPreview` exists in `TampCore`
+but nothing in `App/Tamp` shows a before/after player); the batch panel has
+no custom quality or bitrate controls, only the four presets and Lossless;
+a media item's format, quality and metadata choices aren't remembered between
+launches the way `SettingsStore` remembers an archive's; and the benchmark
+pass that Phase 2a ran for archive formats hasn't reached the speed-step and
+RAM-estimate mappings marked as starting points throughout Phase 3 and 4, to
+replace them with real measurements.
