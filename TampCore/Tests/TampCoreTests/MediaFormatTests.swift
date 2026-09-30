@@ -68,4 +68,10 @@ final class MediaFormatTests: XCTestCase {
         let result = VideoCompressResult(output: URL(fileURLWithPath: "/out.mp4"), inputBytes: 1000, outputBytes: 250)
         XCTAssertEqual(result.savingsFraction, 0.75, accuracy: 0.0001)
     }
+
+    func testEveryMetadataHandlingHasATitle() {
+        for handling in MetadataHandling.allCases {
+            XCTAssertFalse(handling.title.isEmpty, "\(handling)")
+        }
+    }
 }

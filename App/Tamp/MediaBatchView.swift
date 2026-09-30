@@ -28,9 +28,31 @@ struct MediaItemRow: View {
             Spacer(minLength: 8)
             formatPicker
             qualityPicker
+            metadataPicker
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Video has no strip-metadata option yet (see `MediaItem.metadata`'s doc comment).
+    @ViewBuilder
+    private var metadataPicker: some View {
+        if item.kind != .video {
+            Picker("Metadata", selection: metadata) {
+                ForEach(MetadataHandling.allCases, id: \.self) { handling in
+                    Text(handling.title).tag(handling)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+    }
+
+    private var metadata: Binding<MetadataHandling> {
+        Binding(
+            get: { item.metadata },
+            set: { newValue in model.updateMediaItem(item.id) { $0.metadata = newValue } }
+        )
     }
 
     @ViewBuilder

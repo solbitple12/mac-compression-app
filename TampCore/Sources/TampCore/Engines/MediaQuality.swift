@@ -60,4 +60,12 @@ public enum MetadataHandling: String, CaseIterable, Codable, Sendable {
     case stripLocation
     /// Removes all EXIF (and, for audio, ID3/Vorbis comment) metadata.
     case stripAll
+
+    public var title: String {
+        switch self {
+        case .keep: "Keep Metadata"
+        case .stripLocation: "Remove Location"
+        case .stripAll: "Remove All Metadata"
+        }
+    }
 }

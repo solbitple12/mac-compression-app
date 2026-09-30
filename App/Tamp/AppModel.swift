@@ -345,14 +345,20 @@ final class AppModel {
         switch item.target {
         case let .image(format):
             guard let engine = registry.imageEngine(for: format) else { return }
-            let request = ImageCompressRequest(source: item.source, destination: resolvedDestination, format: format, step: item.step, quality: item.quality)
+            let request = ImageCompressRequest(
+                source: item.source, destination: resolvedDestination, format: format,
+                step: item.step, quality: item.quality, metadata: item.metadata
+            )
             Task { [weak self] in
                 let id = await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
                 self?.mediaJobs[id] = mediaJob
             }
         case let .audio(format):
             guard let engine = registry.audioEngine(for: format) else { return }
-            let request = AudioCompressRequest(source: item.source, destination: resolvedDestination, format: format, step: item.step, quality: item.quality)
+            let request = AudioCompressRequest(
+                source: item.source, destination: resolvedDestination, format: format,
+                step: item.step, quality: item.quality, metadata: item.metadata
+            )
             Task { [weak self] in
                 let id = await MediaJobs.compress(request, engine: engine, on: queue, willWrite: willWrite)
                 self?.mediaJobs[id] = mediaJob

@@ -16,6 +16,9 @@ struct MediaItem: Identifiable, Equatable {
     var target: Target
     var step: SpeedStep = .normal
     var quality: MediaQuality = .lossless
+    /// Ignored for video: none of the video engines have a strip-metadata
+    /// option yet, only the stream-copy passthrough that already keeps it.
+    var metadata: MetadataHandling = .keep
 
     var kind: MediaKind {
         switch target {
