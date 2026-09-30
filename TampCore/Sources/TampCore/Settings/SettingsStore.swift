@@ -105,6 +105,7 @@ public final class SettingsStore: @unchecked Sendable {
     enum Key {
         static let archiveChoice = "archiveChoice"
         static let mediaChoice = "mediaChoice"
+        static let recommendationGoal = "recommendationGoal"
         static let recentOutputDirectories = "recentOutputDirectories"
         static let unfinishedBatch = "unfinishedBatch"
     }
@@ -128,6 +129,16 @@ public final class SettingsStore: @unchecked Sendable {
     public var mediaChoice: MediaChoice {
         get { decode(MediaChoice.self, forKey: Key.mediaChoice) ?? MediaChoice() }
         set { encode(newValue, forKey: Key.mediaChoice) }
+    }
+
+    /// What the person wants most from "Recommend for me", asked once and
+    /// remembered; nil until they've answered.
+    public var recommendationGoal: RecommendationGoal? {
+        get { decode(RecommendationGoal.self, forKey: Key.recommendationGoal) }
+        set {
+            if let newValue { encode(newValue, forKey: Key.recommendationGoal) }
+            else { defaults.removeObject(forKey: Key.recommendationGoal) }
+        }
     }
 
     /// The saved choice, with the format swapped for the first available one

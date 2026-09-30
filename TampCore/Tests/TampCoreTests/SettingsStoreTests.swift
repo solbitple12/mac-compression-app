@@ -138,6 +138,17 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertNil(choice.videoQuality)
     }
 
+    func testRecommendationGoalStartsUnanswered() {
+        XCTAssertNil(store.recommendationGoal)
+    }
+
+    func testRecommendationGoalIsRememberedUntilCleared() {
+        store.recommendationGoal = .smallest
+        XCTAssertEqual(SettingsStore(defaults: defaults).recommendationGoal, .smallest)
+        store.recommendationGoal = nil
+        XCTAssertNil(store.recommendationGoal)
+    }
+
     func testUnfinishedBatchIsRememberedUntilCleared() {
         XCTAssertEqual(store.unfinishedBatch, [])
         let archives = [URL(fileURLWithPath: "/tmp/a.zip"), URL(fileURLWithPath: "/tmp/b.7z")]
