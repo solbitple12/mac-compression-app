@@ -147,8 +147,10 @@ struct MediaItemRow: View {
 }
 
 /// A quality choice for one media item: Lossless (when the format can hold
-/// it) plus the four plain-language presets. The Advanced panel's custom
-/// quality and bitrate controls aren't here yet.
+/// it), the four plain-language presets, or Custom, which reveals a 0-100
+/// constant-quality slider (`MediaQuality.customQuality`, the same scale
+/// `ImageQualityMapping` and `VideoQualityMapping` use). The Advanced panel's
+/// target-bitrate control isn't here yet.
 struct MediaQualityPicker: View {
     @Binding var quality: MediaQuality
     var supportsLossless: Bool
@@ -156,6 +158,7 @@ struct MediaQualityPicker: View {
     private enum Choice: Hashable {
         case lossless
         case preset(QualityPreset)
+        case custom
     }
 
     private var choice: Binding<Choice> {
@@ -163,27 +166,47 @@ struct MediaQualityPicker: View {
             get: {
                 if case .lossless = quality { return .lossless }
                 if case let .preset(preset) = quality { return .preset(preset) }
+                if case .customQuality = quality { return .custom }
                 return .preset(.high)
             },
             set: { newValue in
                 switch newValue {
                 case .lossless: quality = .lossless
                 case let .preset(preset): quality = .preset(preset)
+                case .custom: quality = .customQuality(Double(ImageQualityMapping.percent(for: quality)))
                 }
             }
         )
     }
 
     var body: some View {
-        Picker("Quality", selection: choice) {
-            if supportsLossless {
-                Text("Lossless").tag(Choice.lossless)
+        HStack(spacing: 6) {
+            Picker("Quality", selection: choice) {
+                if supportsLossless {
+                    Text("Lossless").tag(Choice.lossless)
+                }
+                ForEach(QualityPreset.allCases, id: \.self) { preset in
+                    Text(preset.title).tag(Choice.preset(preset))
+                }
+                Text("Custom…").tag(Choice.custom)
             }
-            ForEach(QualityPreset.allCases, id: \.self) { preset in
-                Text(preset.title).tag(Choice.preset(preset))
+            .pickerStyle(.menu)
+            .fixedSize()
+            if case let .customQuality(value) = quality {
+                Slider(value: customValue(value), in: 0...100, step: 1)
+                    .frame(width: 90)
+                    .accessibilityLabel("Custom quality")
+                    .accessibilityValue("\(Int(value.rounded()))")
+                Text("\(Int(value.rounded()))")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .frame(width: 22, alignment: .trailing)
+                    .accessibilityHidden(true)
             }
         }
-        .pickerStyle(.menu)
-        .fixedSize()
+    }
+
+    private func customValue(_ value: Double) -> Binding<Double> {
+        Binding(get: { value }, set: { quality = .customQuality($0) })
     }
 }
