@@ -4,7 +4,7 @@ import Foundation
 /// (see the architecture plan's Recommender section): classifies by magic
 /// bytes first, so a renamed file is still recognized, falling back to its
 /// extension only when the bytes don't match anything known.
-public enum FileKind: Equatable, Sendable {
+public enum FileKind: Hashable, Sendable {
     case archive(ArchiveFormat)
     case readOnlyArchive(ReadOnlyFormat)
     case image
