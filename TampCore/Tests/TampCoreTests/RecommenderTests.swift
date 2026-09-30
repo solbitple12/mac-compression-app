@@ -19,8 +19,14 @@ final class RecommenderTests: EngineTestCase {
     }
 
     func testLosslessOnlyRecommendsZipAndTriesTheSevenZipAlternative() async throws {
+        // "project" (from EngineTestCase) deliberately includes a megabyte of
+        // random, incompressible data for the archive round-trip tests, which
+        // would trip RecommenderRules' dense-content rule here; this needs
+        // genuinely compressible, ordinary content instead.
+        let folder = try makeFolder("Compressible")
+        try Data(String(repeating: "Tamp compresses text well. ", count: 4000).utf8).write(to: folder.appendingPathComponent("readme.txt"))
         let result = try await Recommender.recommend(
-            items: [project], goal: .losslessOnly, registry: .standard(),
+            items: [folder], goal: .losslessOnly, registry: .standard(),
             estimator: Estimator(history: EstimateHistory(fileURL: nil)), destination: output
         )
         let recommendation = try XCTUnwrap(result)
