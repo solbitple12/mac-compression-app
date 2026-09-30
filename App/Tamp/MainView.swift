@@ -76,6 +76,9 @@ struct MainView: View {
         .sheet(item: Binding(get: { model.mediaPreview }, set: { if $0 == nil { model.dismissMediaPreview() } })) { preview in
             MediaPreviewView(preview: preview) { model.dismissMediaPreview() }
         }
+        .sheet(item: Binding(get: { model.archiveContentsPreview }, set: { if $0 == nil { model.dismissArchiveContentsPreview() } })) { preview in
+            ArchiveContentsPreviewView(preview: preview) { model.dismissArchiveContentsPreview() }
+        }
         .sheet(isPresented: Binding(get: { model.isChoosingGoal }, set: { if !$0 { model.dismissGoalPicker() } })) {
             GoalPickerView(model: model)
         }
@@ -99,6 +102,14 @@ struct MainView: View {
             Button("OK") { model.dismissAutomaticStopSummary() }
         } message: {
             Text(model.automaticStopSummary ?? "")
+        }
+        .alert(
+            "Tamp couldn't list what's inside",
+            isPresented: Binding(get: { model.archiveContentsError != nil }, set: { if !$0 { model.dismissArchiveContentsError() } })
+        ) {
+            Button("OK") { model.dismissArchiveContentsError() }
+        } message: {
+            Text(model.archiveContentsError ?? "")
         }
         .alert(
             "Tamp couldn't make a preview",

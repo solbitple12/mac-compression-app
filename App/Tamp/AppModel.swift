@@ -51,6 +51,11 @@ final class AppModel {
     var isGeneratingPreview = false
     /// What went wrong making a preview, shown as an alert.
     var previewError: String?
+    /// What an archive holds, listed without extracting; nil once dismissed.
+    var archiveContentsPreview: ArchiveContentsPreview?
+    var isLoadingArchiveContents = false
+    /// What went wrong listing an archive's contents, shown as an alert.
+    var archiveContentsError: String?
     /// Set while the window asks what the person wants most, before the
     /// first "Recommend for me" (see `AppModel+Recommender.swift`).
     var isChoosingGoal = false
@@ -68,6 +73,7 @@ final class AppModel {
     @ObservationIgnored var estimateTask: Task<Void, Never>?
     @ObservationIgnored var fasterTask: Task<Void, Never>?
     @ObservationIgnored var previewTask: Task<Void, Never>?
+    @ObservationIgnored var archiveContentsTask: Task<Void, Never>?
     @ObservationIgnored var recommendationTask: Task<Void, Never>?
     @ObservationIgnored var approvals: StartApproval = []
     /// What each running compress job was asked to do, so the pause dialog can restart it with lower settings.

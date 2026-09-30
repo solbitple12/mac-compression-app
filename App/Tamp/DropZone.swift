@@ -59,6 +59,12 @@ struct DropZone: View {
                             .buttonStyle(.link)
                             .help("Bundle this into a new archive instead of opening it")
                     }
+                    if let archive = singleArchiveToPreview {
+                        Button("Preview Contents") { model.previewContents(of: archive) }
+                            .buttonStyle(.link)
+                            .disabled(model.isLoadingArchiveContents)
+                            .help("See what's inside without extracting it")
+                    }
                 }
             }
         }
@@ -66,6 +72,13 @@ struct DropZone: View {
 
     private var isExtracting: Bool {
         if case .extract = model.pendingAction { true } else { false }
+    }
+
+    /// Only offered for a single archive Tamp can list without extracting
+    /// (see `ArchiveContentsLister`) - a batch preview isn't worth the extra UI.
+    private var singleArchiveToPreview: URL? {
+        guard case let .extract(archives) = model.pendingAction, let only = archives.first, archives.count == 1 else { return nil }
+        return model.canPreviewContents(only) ? only : nil
     }
 
     private var iconName: String {
