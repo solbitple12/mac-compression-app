@@ -6,10 +6,11 @@ distributed as a notarized Developer ID app.
 
 Work in progress: Phases 1 through 3 (all archive formats, advanced options, estimates
 and safety checks, plus images and audio) are done. Phase 4 (video codecs through a
-bundled FFmpeg, RAM estimates for every media kind, and a per-item batch panel with the
-same pre-flight memory/disk checks and paused-job restart archive jobs get) is done too.
-Clip preview and the Advanced panel's custom quality and bitrate controls for media are
-what's left before Phase 5. `CLAUDE.md` has notes for working on it.
+bundled FFmpeg, RAM estimates for every media kind, a per-item batch panel with the same
+pre-flight memory/disk checks and paused-job restart archive jobs get, remembered
+settings per kind, and video clip preview) is done too. A target-bitrate control to go
+with the batch panel's custom quality slider is what's left before Phase 5.
+`CLAUDE.md` has notes for working on it.
 
 ## Layout
 
@@ -276,11 +277,17 @@ kind whose memory estimate changes with step).
 A media item's format, quality and metadata are now remembered per kind
 (`MediaChoice`, the same purpose `ArchiveChoice` serves for archives) and
 reused as the default for the next dropped file of that kind, saved back on
-every edit in the batch panel.
+every edit in the batch panel. Each row's quality picker also has a Custom
+choice, a 0-100 constant-quality slider on the same scale the hint text and
+engines already use.
 
-Still ahead: clip preview has no UI yet (`VideoPreview` exists in `TampCore`
-but nothing in `App/Tamp` shows a before/after player); the batch panel has
-no custom quality or bitrate controls, only the four presets and Lossless;
-and the benchmark pass that Phase 2a ran for archive formats hasn't reached
-the speed-step and RAM-estimate mappings marked as starting points throughout
-Phase 3 and 4, to replace them with real measurements.
+A video item's row has a Preview button: it trims and re-encodes a short
+middle clip with the row's current settings (`VideoPreview` in `TampCore`)
+and opens it beside the original in two side-by-side players, so a quality
+or size difference is visible before running the real job. Only video has
+one; TampCore's `VideoPreview` has no image or audio counterpart yet.
+
+Still ahead: the batch panel's Custom quality has no matching target-bitrate
+control; and the benchmark pass that Phase 2a ran for archive formats hasn't
+reached the speed-step and RAM-estimate mappings marked as starting points
+throughout Phase 3 and 4, to replace them with real measurements.

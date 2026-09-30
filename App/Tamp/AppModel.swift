@@ -46,6 +46,11 @@ final class AppModel {
     var isFindingFasterOption = false
     /// Set once the monitor stopped jobs on its own, until the summary is dismissed.
     var automaticStopSummary: String?
+    /// A generated before/after clip, shown as a sheet; nil once dismissed.
+    var mediaPreview: MediaPreview?
+    var isGeneratingPreview = false
+    /// What went wrong making a preview, shown as an alert.
+    var previewError: String?
 
     let settings: SettingsStore
     let safety = SafetySettings()
@@ -54,6 +59,7 @@ final class AppModel {
     let monitor: ResourceMonitor
     @ObservationIgnored var estimateTask: Task<Void, Never>?
     @ObservationIgnored var fasterTask: Task<Void, Never>?
+    @ObservationIgnored var previewTask: Task<Void, Never>?
     @ObservationIgnored var approvals: StartApproval = []
     /// What each running compress job was asked to do, so the pause dialog can restart it with lower settings.
     @ObservationIgnored var compressJobs: [JobID: CompressJob] = [:]

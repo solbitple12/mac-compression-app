@@ -29,9 +29,30 @@ struct MediaItemRow: View {
             formatPicker
             qualityPicker
             metadataPicker
+            previewButton
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Only video has a preview yet: `VideoPreview` has no image or audio counterpart.
+    @ViewBuilder
+    private var previewButton: some View {
+        if case .video = item.target {
+            Button {
+                model.previewMediaItem(item)
+            } label: {
+                if model.isGeneratingPreview {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "play.circle")
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(model.isGeneratingPreview)
+            .help("Preview a short clip with these settings")
+            .accessibilityLabel("Preview")
+        }
     }
 
     /// Video has no strip-metadata option yet (see `MediaItem.metadata`'s doc comment).

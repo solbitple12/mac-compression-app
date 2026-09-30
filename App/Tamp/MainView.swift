@@ -50,6 +50,9 @@ struct MainView: View {
             PausedJobsView(model: model)
                 .interactiveDismissDisabled()
         }
+        .sheet(item: Binding(get: { model.mediaPreview }, set: { if $0 == nil { model.dismissMediaPreview() } })) { preview in
+            MediaPreviewView(preview: preview) { model.dismissMediaPreview() }
+        }
         .alert(
             "Tamp stopped to protect your Mac",
             isPresented: Binding(get: { model.automaticStopSummary != nil }, set: { if !$0 { model.dismissAutomaticStopSummary() } })
@@ -57,6 +60,14 @@ struct MainView: View {
             Button("OK") { model.dismissAutomaticStopSummary() }
         } message: {
             Text(model.automaticStopSummary ?? "")
+        }
+        .alert(
+            "Tamp couldn't make a preview",
+            isPresented: Binding(get: { model.previewError != nil }, set: { if !$0 { model.dismissPreviewError() } })
+        ) {
+            Button("OK") { model.dismissPreviewError() }
+        } message: {
+            Text(model.previewError ?? "")
         }
     }
 
