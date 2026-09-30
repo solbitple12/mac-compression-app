@@ -33,15 +33,16 @@ struct JobListView: View {
             if model.jobs.isEmpty {
                 Text("Nothing running.")
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
+                // Grows with the number of jobs, up to about five rows, then scrolls.
                 List(model.jobs.reversed()) { job in
                     JobRow(job: job, model: model)
                 }
                 .listStyle(.inset)
+                .frame(height: min(CGFloat(model.jobs.count) * 56, 5 * 56))
             }
         }
-        .frame(maxHeight: .infinity)
     }
 }
 
