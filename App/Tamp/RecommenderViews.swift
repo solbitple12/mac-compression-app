@@ -50,7 +50,8 @@ struct RecommendationCardView: View {
                 Button("Change Goal") { model.changeGoal() }
                     .buttonStyle(.link)
                 Spacer()
-                Button("Dismiss") { model.dismissRecommendation() }
+                Button("Dismiss", role: .cancel) { model.dismissRecommendation() }
+                    .keyboardShortcut(.cancelAction)
                 Button("Accept") { model.acceptRecommendation() }
                     .keyboardShortcut(.defaultAction)
             }
