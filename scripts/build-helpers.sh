@@ -188,6 +188,10 @@ UNIVERSAL_CMAKE=(
 
 mkdir -p "$SRC" "$BIN" "$LICENSES" "$DEPS/include" "$DEPS/lib"
 
+# Nearly every helper builds through CMake; check once up front rather than
+# failing partway through, the way the per-tool nasm/autoconf checks do.
+command -v cmake >/dev/null || brew install cmake >/dev/null
+
 # fetch URL SHA256 FILE: downloads FILE unless it is already there with the right checksum.
 fetch() {
   local url=$1 sha=$2 file=$3
