@@ -51,6 +51,13 @@ final class AppModel {
     var isGeneratingPreview = false
     /// What went wrong making a preview, shown as an alert.
     var previewError: String?
+    /// Set while the window asks what the person wants most, before the
+    /// first "Recommend for me" (see `AppModel+Recommender.swift`).
+    var isChoosingGoal = false
+    var recommendationResult: RecommendationResult?
+    var isRecommending = false
+    /// What went wrong finding a recommendation, shown as an alert.
+    var recommendationError: String?
 
     let settings: SettingsStore
     let safety = SafetySettings()
@@ -60,6 +67,7 @@ final class AppModel {
     @ObservationIgnored var estimateTask: Task<Void, Never>?
     @ObservationIgnored var fasterTask: Task<Void, Never>?
     @ObservationIgnored var previewTask: Task<Void, Never>?
+    @ObservationIgnored var recommendationTask: Task<Void, Never>?
     @ObservationIgnored var approvals: StartApproval = []
     /// What each running compress job was asked to do, so the pause dialog can restart it with lower settings.
     @ObservationIgnored var compressJobs: [JobID: CompressJob] = [:]

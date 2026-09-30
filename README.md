@@ -8,15 +8,18 @@ Work in progress: Phases 1 through 3 (all archive formats, advanced options, est
 and safety checks, plus images and audio) are done. Phase 4 (video codecs through a
 bundled FFmpeg, RAM estimates for every media kind, a per-item batch panel with the same
 pre-flight memory/disk checks and paused-job restart archive jobs get, remembered
-settings per kind, and video clip preview) is done too. A target-bitrate control to go
-with the batch panel's custom quality slider is what's left before Phase 5.
+settings per kind, and video clip preview) is done too. Phase 5 ("Recommend for me":
+scan, sample, trial runs against the real Estimator, rules, and a recommendation card)
+is built as well. A target-bitrate control for the media batch panel's custom quality
+slider, and Phase 6's Finder integration and polish, are what's left.
 `CLAUDE.md` has notes for working on it.
 
 ## Layout
 
 | Path | What it holds |
 | --- | --- |
-| `App/Tamp/` | The SwiftUI app: main window, drop zone, archive format picker and speed slider, the per-item media batch panel (Phase 4), job list |
+| `App/Tamp/` | The SwiftUI app: main window, drop zone, archive format picker and speed slider, the per-item media batch panel (Phase 4), the recommendation card (Phase 5), job list |
+| `TampCore/Sources/TampCore/Recommender/` | Scan (file kind by magic bytes), Sample (entropy), Trial (real Estimator probes) and Rules (profile+goal to recommendation) - Phase 5 |
 | `project.yml` | XcodeGen spec for the app; `xcodegen generate` writes `Tamp.xcodeproj` |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
 | `TampCore/Sources/TampCore/Engines/` | Formats, the speed steps and each engine's step-to-settings mapping, for archives and (Phase 3/4) images, audio and video |
@@ -88,6 +91,15 @@ non-media file — still bundles into one archive the usual way. The same pre-fl
 memory and disk checks archive jobs get cover a media batch too; a paused video item can
 restart one step down, though image and audio's memory estimate doesn't change with
 step, so there's nothing lower to offer those.
+
+"Recommend for Me", beside a plain archive batch's Compress button, asks what matters
+most (Fastest, Smallest, Lossless only, Opens anywhere) the first time and remembers the
+answer; it then scans the dropped files, samples their compressibility, runs the real
+archivers on a trial slice of the input, and shows a card with a recommended format and
+step, its estimate, a plain-language reason, and an alternative when there is one. Accept
+sets the format picker and slider, which can still be nudged afterward. Any candidate
+whose memory or disk estimate would trip the pre-flight checks is dropped before ranking,
+so the recommendation never needs its own safety warning.
 
 ## Speed steps
 
@@ -287,7 +299,29 @@ and opens it beside the original in two side-by-side players, so a quality
 or size difference is visible before running the real job. Only video has
 one; TampCore's `VideoPreview` has no image or audio counterpart yet.
 
-Still ahead: the batch panel's Custom quality has no matching target-bitrate
-control; and the benchmark pass that Phase 2a ran for archive formats hasn't
-reached the speed-step and RAM-estimate mappings marked as starting points
-throughout Phase 3 and 4, to replace them with real measurements.
+Phase 5 (the recommender) is built on top of all this: `RecommenderScan`
+classifies a dropped file by magic bytes (reusing `ArchiveDetector` for
+archives, adding JPEG/PNG/MP4 signatures) and falls back to its extension,
+so a renamed file is still recognized; its entropy sampler reads up to 16
+evenly spaced 64 KB blocks per file to tell already-dense (compressed or
+encrypted) content from text-like data worth compressing.
+`RecommenderRules.recommend(profile:goal:)` is the pure (profile, goal) to
+recommendation function the architecture plan calls for - "must open
+anywhere" forces ZIP outright, dense content recommends Store instead of
+recompressing, "smallest" picks ZPAQ's Best step (with zstd as a much-faster
+alternative when the content is text-heavy), and "lossless only" and
+"fastest" get their own picks. `Recommender.recommend(...)` ties it together
+with a real Trial stage: it runs the actual `Estimator` on the rules' pick
+(and its alternative), dropping either one whose RAM or disk estimate would
+trip the same pre-flight checks archive and media jobs already get, and
+promoting the alternative to primary if the top pick doesn't fit. Two things
+the plan describes aren't built yet: a genuine media-re-encode suggestion
+for a mostly-media batch (falls back to Store instead), and a true split
+plan for a mixed batch of dense and compressible content (flagged by
+`BatchProfile.isMixed` but still one blanket recommendation).
+
+Still ahead: the media batch panel's Custom quality has no matching
+target-bitrate control; and the benchmark pass that Phase 2a ran for archive
+formats hasn't reached the speed-step and RAM-estimate mappings marked as
+starting points throughout Phase 3 and 4, to replace them with real
+measurements. Phase 6 (Finder integration and polish) hasn't started.

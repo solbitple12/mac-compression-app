@@ -22,6 +22,18 @@ struct MainView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if model.canRecommend {
+                    Button {
+                        model.requestRecommendation()
+                    } label: {
+                        if model.isRecommending {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Recommend for Me")
+                        }
+                    }
+                    .disabled(model.isRecommending)
+                }
                 Button(startTitle) { model.start() }
                     .keyboardShortcut(.defaultAction)
                     .controlSize(.large)
@@ -52,6 +64,22 @@ struct MainView: View {
         }
         .sheet(item: Binding(get: { model.mediaPreview }, set: { if $0 == nil { model.dismissMediaPreview() } })) { preview in
             MediaPreviewView(preview: preview) { model.dismissMediaPreview() }
+        }
+        .sheet(isPresented: Binding(get: { model.isChoosingGoal }, set: { if !$0 { model.dismissGoalPicker() } })) {
+            GoalPickerView(model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.recommendationResult != nil }, set: { if !$0 { model.dismissRecommendation() } })) {
+            if let result = model.recommendationResult {
+                RecommendationCardView(result: result, model: model)
+            }
+        }
+        .alert(
+            "Tamp couldn't recommend a format",
+            isPresented: Binding(get: { model.recommendationError != nil }, set: { if !$0 { model.dismissRecommendationError() } })
+        ) {
+            Button("OK") { model.dismissRecommendationError() }
+        } message: {
+            Text(model.recommendationError ?? "")
         }
         .alert(
             "Tamp stopped to protect your Mac",
