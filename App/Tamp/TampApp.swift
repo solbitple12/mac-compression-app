@@ -17,6 +17,10 @@ struct TampApp: App {
             }
         }
 
+        MenuBarExtra("Tamp", systemImage: "shippingbox") {
+            MenuBarContentView(model: appDelegate.model)
+        }
+
         Settings {
             PreferencesView(model: appDelegate.model)
         }
