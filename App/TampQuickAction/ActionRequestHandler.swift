@@ -42,14 +42,8 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling {
         }
 
         group.notify(queue: .main) {
-            if !urls.isEmpty {
-                NSWorkspace.shared.open(
-                    urls,
-                    withAppBundleIdentifier: "io.github.solbitple12.Tamp",
-                    options: [],
-                    additionalEventParamDescriptor: nil,
-                    launchIdentifiers: nil
-                )
+            if !urls.isEmpty, let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.solbitple12.Tamp") {
+                NSWorkspace.shared.open(urls, withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration())
             }
             context.completeRequest(returningItems: nil, completionHandler: nil)
         }
