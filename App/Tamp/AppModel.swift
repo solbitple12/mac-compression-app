@@ -63,6 +63,12 @@ final class AppModel {
     var isRecommending = false
     /// What went wrong finding a recommendation, shown as an alert.
     var recommendationError: String?
+    /// A quick size/time/memory estimate for a few formats at the current
+    /// step, side by side; nil once dismissed. See `AppModel+FormatComparison.swift`.
+    var formatComparison: [FormatComparisonRow]?
+    var isComparingFormats = false
+    /// What went wrong comparing formats, shown as an alert.
+    var formatComparisonError: String?
 
     let settings: SettingsStore
     /// Set only through `updateSafety(_:)` (`AppModel+Safety.swift`), which also persists it and updates the monitor.
@@ -74,6 +80,7 @@ final class AppModel {
     @ObservationIgnored var fasterTask: Task<Void, Never>?
     @ObservationIgnored var previewTask: Task<Void, Never>?
     @ObservationIgnored var archiveContentsTask: Task<Void, Never>?
+    @ObservationIgnored var formatComparisonTask: Task<Void, Never>?
     @ObservationIgnored var recommendationTask: Task<Void, Never>?
     @ObservationIgnored var approvals: StartApproval = []
     /// What each running compress job was asked to do, so the pause dialog can restart it with lower settings.

@@ -30,6 +30,18 @@ struct MainView: View {
                     RecentJobsMenu(model: model)
                 }
                 Spacer()
+                if model.canCompareFormats {
+                    Button {
+                        model.compareFormats()
+                    } label: {
+                        if model.isComparingFormats {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Compare Formats")
+                        }
+                    }
+                    .disabled(model.isComparingFormats)
+                }
                 if model.canRecommend {
                     Button {
                         model.requestRecommendation()
@@ -79,6 +91,11 @@ struct MainView: View {
         .sheet(item: Binding(get: { model.archiveContentsPreview }, set: { if $0 == nil { model.dismissArchiveContentsPreview() } })) { preview in
             ArchiveContentsPreviewView(preview: preview) { model.dismissArchiveContentsPreview() }
         }
+        .sheet(isPresented: Binding(get: { model.formatComparison != nil }, set: { if !$0 { model.dismissFormatComparison() } })) {
+            if let rows = model.formatComparison {
+                FormatComparisonView(rows: rows, model: model)
+            }
+        }
         .sheet(isPresented: Binding(get: { model.isChoosingGoal }, set: { if !$0 { model.dismissGoalPicker() } })) {
             GoalPickerView(model: model)
         }
@@ -102,6 +119,14 @@ struct MainView: View {
             Button("OK") { model.dismissAutomaticStopSummary() }
         } message: {
             Text(model.automaticStopSummary ?? "")
+        }
+        .alert(
+            "Tamp couldn't compare formats",
+            isPresented: Binding(get: { model.formatComparisonError != nil }, set: { if !$0 { model.dismissFormatComparisonError() } })
+        ) {
+            Button("OK") { model.dismissFormatComparisonError() }
+        } message: {
+            Text(model.formatComparisonError ?? "")
         }
         .alert(
             "Tamp couldn't list what's inside",
