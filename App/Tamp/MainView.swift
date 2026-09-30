@@ -4,7 +4,27 @@ import TampCore
 struct MainView: View {
     let model: AppModel
 
+    // Split into several small chains, and `content` pulled out on its own:
+    // one `body` combining all of this app's sheets and alerts in a single
+    // expression is too much for the type checker to solve in reasonable time.
     var body: some View {
+        content
+            .confirmationDialog(
+                "Move the originals to the Trash after compressing?",
+                isPresented: Binding(get: { model.isConfirmingTrash }, set: { model.isConfirmingTrash = $0 })
+            ) {
+                Button("Compress, Then Move to Trash", role: .destructive) { model.approve(.trash) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("They go to the Trash only if the archive is written\(model.choice.verifies ? " and checks out" : ""). You can put them back from there.")
+            }
+            .jobSheets(model: model)
+            .previewSheets(model: model)
+            .recommenderSheets(model: model)
+            .errorAlerts(model: model)
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -66,16 +86,34 @@ struct MainView: View {
             JobListView(model: model)
                 .padding(20)
         }
-        .confirmationDialog(
-            "Move the originals to the Trash after compressing?",
-            isPresented: Binding(get: { model.isConfirmingTrash }, set: { model.isConfirmingTrash = $0 })
-        ) {
-            Button("Compress, Then Move to Trash", role: .destructive) { model.approve(.trash) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("They go to the Trash only if the archive is written\(model.choice.verifies ? " and checks out" : ""). You can put them back from there.")
+    }
+
+    private var isExtracting: Bool {
+        if case .extract = model.pendingAction { true } else { false }
+    }
+
+    private var startTitle: String {
+        if !model.mediaItems.isEmpty {
+            return model.mediaItems.count == 1 ? "Compress" : "Compress \(model.mediaItems.count)"
         }
-        .sheet(item: Binding(get: { model.passwordRequest }, set: { if $0 == nil { model.answerPasswordRequest(nil) } })) { request in
+        switch model.pendingAction {
+        case let .extract(archives): return archives.count == 1 ? "Extract" : "Extract \(archives.count)"
+        case .compress, nil: return "Compress"
+        }
+    }
+
+    private var destinationText: String {
+        isExtracting ? "Extracts next to each archive" : "Saves next to the originals"
+    }
+}
+
+/// Each group below is its own function, not more of `MainView.body`, because
+/// the type checker times out solving one expression with this many `.sheet`
+/// and `.alert` calls chained together.
+private extension View {
+    /// Sheets a job itself asks for while running or about to start.
+    func jobSheets(model: AppModel) -> some View {
+        sheet(item: Binding(get: { model.passwordRequest }, set: { if $0 == nil { model.answerPasswordRequest(nil) } })) { request in
             PasswordPrompt(request: request) { model.answerPasswordRequest($0) }
         }
         .sheet(item: Binding(get: { model.startQuestion }, set: { if $0 == nil { model.dismissStartQuestion() } })) { question in
@@ -85,7 +123,11 @@ struct MainView: View {
             PausedJobsView(model: model)
                 .interactiveDismissDisabled()
         }
-        .sheet(item: Binding(get: { model.mediaPreview }, set: { if $0 == nil { model.dismissMediaPreview() } })) { preview in
+    }
+
+    /// A generated clip, an archive's contents, or a size/time comparison - each on demand, not tied to starting a job.
+    func previewSheets(model: AppModel) -> some View {
+        sheet(item: Binding(get: { model.mediaPreview }, set: { if $0 == nil { model.dismissMediaPreview() } })) { preview in
             MediaPreviewView(preview: preview) { model.dismissMediaPreview() }
         }
         .sheet(item: Binding(get: { model.archiveContentsPreview }, set: { if $0 == nil { model.dismissArchiveContentsPreview() } })) { preview in
@@ -96,7 +138,11 @@ struct MainView: View {
                 FormatComparisonView(rows: rows, model: model)
             }
         }
-        .sheet(isPresented: Binding(get: { model.isChoosingGoal }, set: { if !$0 { model.dismissGoalPicker() } })) {
+    }
+
+    /// "Recommend for me": the goal picker, then its result.
+    func recommenderSheets(model: AppModel) -> some View {
+        sheet(isPresented: Binding(get: { model.isChoosingGoal }, set: { if !$0 { model.dismissGoalPicker() } })) {
             GoalPickerView(model: model)
         }
         .sheet(isPresented: Binding(get: { model.recommendationResult != nil }, set: { if !$0 { model.dismissRecommendation() } })) {
@@ -104,7 +150,11 @@ struct MainView: View {
                 RecommendationCardView(result: result, model: model)
             }
         }
-        .alert(
+    }
+
+    /// Every plain "something went wrong" alert.
+    func errorAlerts(model: AppModel) -> some View {
+        alert(
             "Tamp couldn't recommend a format",
             isPresented: Binding(get: { model.recommendationError != nil }, set: { if !$0 { model.dismissRecommendationError() } })
         ) {
@@ -144,24 +194,6 @@ struct MainView: View {
         } message: {
             Text(model.previewError ?? "")
         }
-    }
-
-    private var isExtracting: Bool {
-        if case .extract = model.pendingAction { true } else { false }
-    }
-
-    private var startTitle: String {
-        if !model.mediaItems.isEmpty {
-            return model.mediaItems.count == 1 ? "Compress" : "Compress \(model.mediaItems.count)"
-        }
-        switch model.pendingAction {
-        case let .extract(archives): return archives.count == 1 ? "Extract" : "Extract \(archives.count)"
-        case .compress, nil: return "Compress"
-        }
-    }
-
-    private var destinationText: String {
-        isExtracting ? "Extracts next to each archive" : "Saves next to the originals"
     }
 }
 
