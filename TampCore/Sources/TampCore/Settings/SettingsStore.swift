@@ -102,6 +102,24 @@ public struct ArchivePreset: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// A finished job kept for a quick "Show in Finder" without re-dragging the
+/// input back in; `output` may no longer exist if it was since moved or deleted.
+public struct RecentJob: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var title: String
+    private var outputPath: String
+    public var finishedAt: Date
+
+    public init(id: UUID = UUID(), title: String, output: URL, finishedAt: Date = Date()) {
+        self.id = id
+        self.title = title
+        outputPath = output.standardizedFileURL.path
+        self.finishedAt = finishedAt
+    }
+
+    public var output: URL { URL(fileURLWithPath: outputPath) }
+}
+
 /// The format, quality and metadata choice last used for each media kind
 /// (image, audio, video), restored at launch the way `ArchiveChoice` restores
 /// the last archive format and step. Nil until something of that kind has
@@ -147,11 +165,14 @@ public final class SettingsStore: @unchecked Sendable {
         static let safetySettings = "safetySettings"
         static let presets = "presets"
         static let recentOutputDirectories = "recentOutputDirectories"
+        static let recentJobs = "recentJobs"
         static let unfinishedBatch = "unfinishedBatch"
     }
 
     /// How many output folders are remembered for the launch-time cleanup of partial files.
     public static let recentDirectoryLimit = 20
+    /// How many finished jobs are kept for the Recent menu.
+    public static let recentJobLimit = 20
 
     private let defaults: UserDefaults
 
@@ -215,6 +236,18 @@ public final class SettingsStore: @unchecked Sendable {
         var paths = recentOutputDirectories.map(\.path).filter { $0 != path }
         paths.insert(path, at: 0)
         encode(Array(paths.prefix(Self.recentDirectoryLimit)), forKey: Key.recentOutputDirectories)
+    }
+
+    /// Finished jobs kept for the Recent menu, most recent first.
+    public var recentJobs: [RecentJob] {
+        get { decode([RecentJob].self, forKey: Key.recentJobs) ?? [] }
+        set { encode(newValue, forKey: Key.recentJobs) }
+    }
+
+    public func noteRecentJob(title: String, output: URL) {
+        var jobs = recentJobs
+        jobs.insert(RecentJob(title: title, output: output), at: 0)
+        recentJobs = Array(jobs.prefix(Self.recentJobLimit))
     }
 
     /// Archives a stopped batch hadn't started, so Resume can pick up where it

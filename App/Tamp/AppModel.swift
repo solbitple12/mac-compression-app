@@ -95,6 +95,7 @@ final class AppModel {
         observeJobs()
         observeResources()
         loadPresets()
+        loadRecentJobs()
     }
 
     // MARK: Format and speed
@@ -165,6 +166,19 @@ final class AppModel {
     func deletePreset(_ preset: ArchivePreset) {
         presets.removeAll { $0.id == preset.id }
         settings.presets = presets
+    }
+
+    // MARK: Recent jobs
+
+    private(set) var recentJobs: [RecentJob] = []
+
+    func loadRecentJobs() {
+        recentJobs = settings.recentJobs
+    }
+
+    func clearRecentJobs() {
+        recentJobs = []
+        settings.recentJobs = []
     }
 
     // MARK: Advanced settings
@@ -592,10 +606,18 @@ final class AppModel {
         if let index = jobs.firstIndex(where: { $0.id == snapshot.id }) {
             let wasFinal = jobs[index].state.isFinal
             jobs[index] = snapshot
-            if !wasFinal, snapshot.state.isFinal { JobNotifications.notify(snapshot) }
+            if !wasFinal, snapshot.state.isFinal {
+                JobNotifications.notify(snapshot)
+                if snapshot.state == .finished, let output = snapshot.output { noteRecentJob(title: snapshot.displayTitle, output: output) }
+            }
         } else {
             // A job publishes nothing after its final state, so a cleared job never comes back.
             jobs.append(snapshot)
         }
+    }
+
+    private func noteRecentJob(title: String, output: URL) {
+        settings.noteRecentJob(title: title, output: output)
+        recentJobs = settings.recentJobs
     }
 }

@@ -199,4 +199,22 @@ final class SettingsStoreTests: XCTestCase {
         store.unfinishedBatch = []
         XCTAssertEqual(store.unfinishedBatch, [])
     }
+
+    func testRecentJobsStartEmpty() {
+        XCTAssertEqual(store.recentJobs, [])
+    }
+
+    func testRecentJobsAreRememberedNewestFirstAndCapped() {
+        store.noteRecentJob(title: "Compressed “A”", output: URL(fileURLWithPath: "/tmp/a.zip"))
+        store.noteRecentJob(title: "Compressed “B”", output: URL(fileURLWithPath: "/tmp/b.zip"))
+        let reloaded = SettingsStore(defaults: defaults).recentJobs
+        XCTAssertEqual(reloaded.map(\.title), ["Compressed “B”", "Compressed “A”"])
+        XCTAssertEqual(reloaded.first?.output.path, "/tmp/b.zip")
+
+        for index in 0..<30 {
+            store.noteRecentJob(title: "Job \(index)", output: URL(fileURLWithPath: "/tmp/many/\(index).zip"))
+        }
+        XCTAssertEqual(store.recentJobs.count, SettingsStore.recentJobLimit)
+        XCTAssertEqual(store.recentJobs.first?.title, "Job 29")
+    }
 }

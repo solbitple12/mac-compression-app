@@ -26,6 +26,9 @@ struct MainView: View {
                 Text(destinationText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                if !model.recentJobs.isEmpty {
+                    RecentJobsMenu(model: model)
+                }
                 Spacer()
                 if model.canRecommend {
                     Button {
