@@ -190,7 +190,7 @@ struct SpeedSlider: View {
     private static let lastIndex = Double(steps.count - 1)
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 10) {
             Slider(
                 value: Binding(
                     get: { Double(step.rawValue) },
