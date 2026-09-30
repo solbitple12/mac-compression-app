@@ -43,7 +43,7 @@ struct DropZone: View {
             }
         } else {
             VStack(spacing: 8) {
-                Image(systemName: isExtracting ? "archivebox" : "doc.on.doc")
+                Image(systemName: iconName)
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
@@ -63,9 +63,34 @@ struct DropZone: View {
         if case .extract = model.pendingAction { true } else { false }
     }
 
+    private var iconName: String {
+        if !model.mediaItems.isEmpty { return "photo.on.rectangle" }
+        return isExtracting ? "archivebox" : "doc.on.doc"
+    }
+
     private var summary: String {
+        if !model.mediaItems.isEmpty { return mediaSummary }
         let names = ArchivePlanner.displayName(for: model.pendingItems)
         if model.isCheckingItems { return "Checking \(names)…" }
         return isExtracting ? "Ready to extract \(names)" : "Ready to compress \(names)"
+    }
+
+    /// "Ready to compress "photo.jpg"" for one item, else a breakdown by kind
+    /// ("2 images, 1 video") since each gets its own row and settings below.
+    private var mediaSummary: String {
+        guard model.mediaItems.count > 1 else {
+            let name = model.mediaItems.first.map { "“\($0.source.lastPathComponent)”" } ?? ""
+            return "Ready to compress \(name)"
+        }
+        let parts: [String] = [MediaKind.image, .audio, .video].compactMap { kind in
+            let count = model.mediaItems.filter { $0.kind == kind }.count
+            guard count > 0 else { return nil }
+            switch kind {
+            case .image: return "\(count) image\(count == 1 ? "" : "s")"
+            case .audio: return "\(count) audio file\(count == 1 ? "" : "s")"
+            case .video: return "\(count) video\(count == 1 ? "" : "s")"
+            }
+        }
+        return "Ready to compress " + parts.joined(separator: ", ")
     }
 }
