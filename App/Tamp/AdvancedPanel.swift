@@ -23,6 +23,12 @@ struct AdvancedPanel: View {
             }
             .formStyle(.columns)
             .padding(.top, 8)
+            // Caps the Form's own natural width so a wide row (the encryption
+            // picker's explanatory text, a long block-size list) can't grow
+            // past this and drag the whole window's minimum width along with
+            // it - windowResizability(.contentMinSize) would otherwise widen
+            // the window itself the moment this panel opens.
+            .frame(maxWidth: 420, alignment: .leading)
         }
         .accessibilityIdentifier("advancedPanel")
     }
