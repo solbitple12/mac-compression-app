@@ -71,9 +71,22 @@ public struct ZipMapping: SpeedStepMapping {
         let parameters = parameters(for: step, options: options)
         var notes: [String] = []
         if step != .store {
-            notes.append(parameters.method == .deflate
-                ? "Opens on any computer, including Windows"
-                : "Windows Explorer and macOS Archive Utility may not open this; the recipient needs 7-Zip or similar")
+            switch parameters.method {
+            case .deflate:
+                notes.append("Opens on any computer, including Windows")
+            case .deflate64:
+                notes.append("A little smaller than Deflate on large files, but even less widely supported; "
+                    + "the recipient needs 7-Zip or similar")
+            case .bzip2:
+                notes.append("Good for text-heavy content, but slower to decompress than to compress; "
+                    + "the recipient needs 7-Zip or similar")
+            case .lzma, .lzma2:
+                notes.append("Smaller than Deflate, especially for text; the recipient needs 7-Zip or similar")
+            case .zstd:
+                notes.append("Fast with a good ratio, but the recipient needs 7-Zip or another Zstandard-aware tool")
+            case .ppmd:
+                notes.append("Windows Explorer and macOS Archive Utility may not open this; the recipient needs 7-Zip or similar")
+            }
         }
         return StepHint(
             step: step,

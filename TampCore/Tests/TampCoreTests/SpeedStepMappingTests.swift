@@ -104,6 +104,19 @@ final class ZipMappingTests: XCTestCase {
             }
         }
     }
+
+    func testEachMethodHasItsOwnNote() {
+        func note(_ method: CompressionMethod) -> String {
+            mapping.hint(for: .normal, options: ArchiveOptions(threads: 2, method: method)).notes[0]
+        }
+        XCTAssertEqual(note(.deflate), "Opens on any computer, including Windows")
+        XCTAssertTrue(note(.deflate64).contains("Deflate"), "should compare itself to Deflate")
+        XCTAssertTrue(note(.bzip2).contains("text"), "should mention it favors text-heavy content")
+        XCTAssertTrue(note(.lzma).contains("Deflate"), "should compare itself to Deflate")
+        XCTAssertTrue(note(.zstd).contains("Zstandard"), "should name itself, not just say 7-Zip")
+        // Store never compresses, so there's nothing to note about the method.
+        XCTAssertEqual(mapping.hint(for: .store, options: ArchiveOptions(threads: 2, method: .bzip2)).notes, [])
+    }
 }
 
 final class SevenZipMappingTests: XCTestCase {
