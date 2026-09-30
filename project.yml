@@ -24,6 +24,9 @@ targets:
     dependencies:
       - package: TampCore
         product: TampCore
+      - target: TampQuickAction
+        embed: true
+        codeSign: true
     settings:
       base:
         PRODUCT_NAME: Tamp
@@ -94,6 +97,41 @@ targets:
     scheme:
       testTargets:
         - TampUITests
+  # Finder's Quick Actions (right-click, Preview pane, Touch Bar): a thin,
+  # sandboxed Action Extension that only collects the selected file URLs and
+  # hands them to the main app via NSWorkspace, the same way Dock drop and
+  # Open With do (AppDelegate.application(_:open:)). The actual compress or
+  # extract job always runs in Tamp itself, never in this short-lived process.
+  TampQuickAction:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: App/TampQuickAction
+    settings:
+      base:
+        PRODUCT_NAME: TampQuickAction
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.Tamp.QuickAction
+        ENABLE_HARDENED_RUNTIME: YES
+        # App Extensions are always sandboxed; unlike the main app, this isn't optional.
+        ENABLE_APP_SANDBOX: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_ENTITLEMENTS: App/TampQuickAction/TampQuickAction.entitlements
+      configs:
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    info:
+      path: Generated/TampQuickAction-Info.plist
+      properties:
+        CFBundleDisplayName: Compress with Tamp
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ActionRequestHandler
+          NSExtensionAttributes:
+            NSExtensionServiceAllowsFinderPreviewItem: true
+            NSExtensionServiceFinderPreviewLabel: Compress with Tamp
+            NSExtensionServiceRoleType: NSExtensionServiceRoleTypeEditor
+            NSExtensionActivationRule: TRUEPREDICATE
   TampUITests:
     type: bundle.ui-testing
     platform: macOS

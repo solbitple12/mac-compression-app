@@ -68,6 +68,8 @@ jobs:
           for license in "${TAMP_LICENSES[@]}"; do
             test -s "$app/Contents/Resources/Licenses/$license"
           done
+          test -x "$app/Contents/PlugIns/TampQuickAction.appex/Contents/MacOS/TampQuickAction"
+          codesign --verify --strict "$app/Contents/PlugIns/TampQuickAction.appex"
           codesign --verify --deep --strict --verbose=2 "$app"
       - name: Launch Tamp
         run: |

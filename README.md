@@ -10,8 +10,10 @@ bundled FFmpeg, RAM estimates for every media kind, a per-item batch panel with 
 pre-flight memory/disk checks and paused-job restart archive jobs get, remembered
 settings per kind, and video clip preview) is done too. Phase 5 ("Recommend for me":
 scan, sample, trial runs against the real Estimator, rules, and a recommendation card)
-is built as well. A target-bitrate control for the media batch panel's custom quality
-slider, and Phase 6's Finder integration and polish, are what's left.
+is built as well. Phase 6 (Finder integration and polish - Preferences, Dock drop, Open
+With, Services, a Quick Action extension, notifications, presets, and a keyboard-shortcuts
+and VoiceOver pass) is mostly done. A target-bitrate control for the media batch panel's
+custom quality slider is what's left.
 `CLAUDE.md` has notes for working on it.
 
 ## Layout
@@ -19,6 +21,7 @@ slider, and Phase 6's Finder integration and polish, are what's left.
 | Path | What it holds |
 | --- | --- |
 | `App/Tamp/` | The SwiftUI app: main window, drop zone, archive format picker and speed slider, the per-item media batch panel (Phase 4), the recommendation card (Phase 5), job list |
+| `App/TampQuickAction/` | Finder's Quick Action extension (Phase 6): hands the selected files to the main app, which does the actual job |
 | `TampCore/Sources/TampCore/Recommender/` | Scan (file kind by magic bytes), Sample (entropy), Trial (real Estimator probes) and Rules (profile+goal to recommendation) - Phase 5 |
 | `project.yml` | XcodeGen spec for the app; `xcodegen generate` writes `Tamp.xcodeproj` |
 | `TampCore/` | Swift package with all app logic, unit-testable without the app |
@@ -189,7 +192,8 @@ TAMP_HELPERS_DIR=$PWD/build/helpers/bin swift run --package-path TampCore -c rel
 - Apple Archive can't take a password yet.
 - Estimates cover compressing only; extracting shows a live ETA once it starts.
 - Only one job runs at a time, so the memory checks hold.
-- The thresholds (70%, 1 GB, 30 minutes, 60 seconds) are fixed until Preferences arrive in Phase 6.
+- The thresholds (memory share, disk reserve, long-job time, unanswered-pause timeout) are
+  editable from Tamp > Settings…, defaulting to 70%, 1 GB, 30 minutes and 60 seconds.
 - ZIP with Zstandard can't be split into parts (minizip writes it, not 7-Zip).
 - If two copies of Tamp run at once, the one launched second can remove the other's
   unfinished output while cleaning up after crashes.
@@ -324,4 +328,12 @@ Still ahead: the media batch panel's Custom quality has no matching
 target-bitrate control; and the benchmark pass that Phase 2a ran for archive
 formats hasn't reached the speed-step and RAM-estimate mappings marked as
 starting points throughout Phase 3 and 4, to replace them with real
-measurements. Phase 6 (Finder integration and polish) hasn't started.
+measurements.
+
+Phase 6 (Finder integration and polish) is in progress: Preferences (safety
+thresholds), Dock drop, Open With, a Services entry and a Finder Quick
+Action extension (both "Open with Tamp", routing through
+`AppModel.add(_:)`/`application(_:open:)`), background notifications on a
+finished or failed job, named archive presets, a keyboard-shortcuts pass and
+a VoiceOver labeling pass are done. The signing and notarization guide was
+reviewed and needs no changes for this phase.

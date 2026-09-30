@@ -63,7 +63,7 @@ APP="$OUT/Tamp.app"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 
 step "Checking the bundle"
-executables=("$APP/Contents/MacOS/Tamp")
+executables=("$APP/Contents/MacOS/Tamp" "$APP/Contents/PlugIns/TampQuickAction.appex/Contents/MacOS/TampQuickAction")
 for helper in "${TAMP_HELPERS[@]}"; do executables+=("$APP/Contents/Helpers/$helper"); done
 for exe in "${executables[@]}"; do
   name="${exe#"$APP/"}"

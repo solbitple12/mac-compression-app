@@ -50,7 +50,7 @@ scripts/release.sh --dry-run
 This builds the helpers and a Release `Tamp.app`, signs it for this Mac only, and
 fails if any of these would get the app rejected or break it on an older Mac:
 
-- Tamp and each helper (7zz, bsdtar, zstd) has both arm64 and x86_64 code.
+- Tamp, the TampQuickAction extension, and each helper (7zz, bsdtar, zstd) has both arm64 and x86_64 code.
 - Each one runs on macOS 14, the oldest version Tamp supports.
 - Each one is signed with the hardened runtime.
 - The app has no `get-task-allow` entitlement (a debugging entitlement that
