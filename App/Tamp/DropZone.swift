@@ -54,6 +54,11 @@ struct DropZone: View {
                 HStack {
                     Button("Add More…") { model.chooseFiles() }
                     Button("Clear") { model.clearPendingItems() }
+                    if isExtracting {
+                        Button("Compress Instead") { model.forceCompress() }
+                            .buttonStyle(.link)
+                            .help("Bundle this into a new archive instead of opening it")
+                    }
                 }
             }
         }

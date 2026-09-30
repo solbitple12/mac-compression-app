@@ -265,6 +265,22 @@ final class AppModel {
         scheduleEstimate()
     }
 
+    /// Overrides the auto-detected "extract" so already-archived items (a .zip,
+    /// say) can instead be bundled into a new archive, the way any other file
+    /// would be - useful for re-compressing an archive into a smaller format.
+    func forceCompress() {
+        guard case .extract = pendingAction, !pendingItems.isEmpty else { return }
+        checkGeneration += 1
+        let generation = checkGeneration
+        let items = pendingItems
+        pendingAction = .compress(items)
+        isCheckingItems = true
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let profile = InputProfile.scan(items)
+            await self?.finishCheck(.compress(items), profile: profile, generation: generation)
+        }
+    }
+
     func chooseFiles() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
