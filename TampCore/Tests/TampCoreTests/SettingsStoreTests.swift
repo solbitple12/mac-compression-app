@@ -109,6 +109,35 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.recentOutputDirectories.first?.path, "/tmp/many/29")
     }
 
+    func testMediaChoiceStartsEmpty() {
+        XCTAssertEqual(store.mediaChoice, MediaChoice())
+    }
+
+    func testMediaChoiceIsRememberedPerKind() {
+        var choice = MediaChoice()
+        choice.imageFormat = .webp
+        choice.imageQuality = .preset(.veryHigh)
+        choice.imageMetadata = .stripLocation
+        choice.audioFormat = .opus
+        choice.videoFormat = .av1
+        store.mediaChoice = choice
+        let restored = SettingsStore(defaults: defaults).mediaChoice
+        XCTAssertEqual(restored, choice)
+    }
+
+    func testMediaChoiceUnreadableDataFallsBackToEmpty() {
+        defaults.set("not data", forKey: SettingsStore.Key.mediaChoice)
+        XCTAssertEqual(store.mediaChoice, MediaChoice())
+    }
+
+    func testMediaChoiceSavedBeforeNewerFieldsExistedStillLoads() {
+        defaults.set(Data(#"{"imageFormat":"png"}"#.utf8), forKey: SettingsStore.Key.mediaChoice)
+        let choice = store.mediaChoice
+        XCTAssertEqual(choice.imageFormat, .png)
+        XCTAssertNil(choice.audioFormat)
+        XCTAssertNil(choice.videoQuality)
+    }
+
     func testUnfinishedBatchIsRememberedUntilCleared() {
         XCTAssertEqual(store.unfinishedBatch, [])
         let archives = [URL(fileURLWithPath: "/tmp/a.zip"), URL(fileURLWithPath: "/tmp/b.7z")]

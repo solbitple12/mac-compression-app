@@ -64,11 +64,47 @@ public struct ArchiveChoice: Codable, Equatable, Sendable {
     }
 }
 
+/// The format, quality and metadata choice last used for each media kind
+/// (image, audio, video), restored at launch the way `ArchiveChoice` restores
+/// the last archive format and step. Nil until something of that kind has
+/// been re-encoded, so a fresh install still gets `MediaPlanner`'s own defaults.
+public struct MediaChoice: Codable, Equatable, Sendable {
+    public var imageFormat: ImageFormat?
+    public var imageQuality: MediaQuality?
+    public var imageMetadata: MetadataHandling?
+    public var audioFormat: AudioFormat?
+    public var audioQuality: MediaQuality?
+    public var audioMetadata: MetadataHandling?
+    public var videoFormat: VideoFormat?
+    /// Video has no metadata toggle yet (see `MediaItem.metadata`'s doc comment in the app).
+    public var videoQuality: MediaQuality?
+
+    public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case imageFormat, imageQuality, imageMetadata, audioFormat, audioQuality, audioMetadata, videoFormat, videoQuality
+    }
+
+    /// Settings saved by an older Tamp lack newer keys, which keep their nil default.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        imageFormat = try? container.decodeIfPresent(ImageFormat.self, forKey: .imageFormat)
+        imageQuality = try? container.decodeIfPresent(MediaQuality.self, forKey: .imageQuality)
+        imageMetadata = try? container.decodeIfPresent(MetadataHandling.self, forKey: .imageMetadata)
+        audioFormat = try? container.decodeIfPresent(AudioFormat.self, forKey: .audioFormat)
+        audioQuality = try? container.decodeIfPresent(MediaQuality.self, forKey: .audioQuality)
+        audioMetadata = try? container.decodeIfPresent(MetadataHandling.self, forKey: .audioMetadata)
+        videoFormat = try? container.decodeIfPresent(VideoFormat.self, forKey: .videoFormat)
+        videoQuality = try? container.decodeIfPresent(MediaQuality.self, forKey: .videoQuality)
+    }
+}
+
 /// Tamp's saved settings, stored as Codable values in UserDefaults.
 /// UserDefaults is thread-safe, so the store can be used from any thread.
 public final class SettingsStore: @unchecked Sendable {
     enum Key {
         static let archiveChoice = "archiveChoice"
+        static let mediaChoice = "mediaChoice"
         static let recentOutputDirectories = "recentOutputDirectories"
         static let unfinishedBatch = "unfinishedBatch"
     }
@@ -86,6 +122,12 @@ public final class SettingsStore: @unchecked Sendable {
     public var archiveChoice: ArchiveChoice {
         get { decode(ArchiveChoice.self, forKey: Key.archiveChoice) ?? .default }
         set { encode(newValue, forKey: Key.archiveChoice) }
+    }
+
+    /// Unreadable data falls back to an empty choice, the same as a fresh install.
+    public var mediaChoice: MediaChoice {
+        get { decode(MediaChoice.self, forKey: Key.mediaChoice) ?? MediaChoice() }
+        set { encode(newValue, forKey: Key.mediaChoice) }
     }
 
     /// The saved choice, with the format swapped for the first available one
