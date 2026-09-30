@@ -14,26 +14,30 @@ helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
 licenses="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Licenses"
 tools=("${TAMP_HELPERS[@]}")
 
-for tool in "${tools[@]}"; do
-  if [ ! -x "$source_dir/bin/$tool" ]; then
-    if [ "$CONFIGURATION" = "Release" ]; then
-      echo "error: $source_dir/bin/$tool is missing. Run scripts/build-helpers.sh first."
-      exit 1
-    fi
-    echo "warning: $source_dir/bin/$tool is missing, so jobs will fail. Run scripts/build-helpers.sh."
-    exit 0
-  fi
-done
-
 identity="${EXPANDED_CODE_SIGN_IDENTITY:--}"
 # Notarization needs a secure timestamp; an ad-hoc signature can't have one.
 if [ "$identity" = "-" ]; then timestamp=--timestamp=none; else timestamp=--timestamp; fi
 
 mkdir -p "$helpers" "$licenses"
+missing=()
 for tool in "${tools[@]}"; do
+  if [ ! -x "$source_dir/bin/$tool" ]; then
+    missing+=("$tool")
+    continue
+  fi
   ditto "$source_dir/bin/$tool" "$helpers/$tool"
   if [ "${CODE_SIGNING_ALLOWED:-NO}" = "YES" ]; then
     codesign --force --options runtime "$timestamp" --sign "$identity" "$helpers/$tool"
   fi
 done
+
+# A tool still being built (say, oxipng waiting on a Rust toolchain) shouldn't
+# stop every other already-built helper from being bundled and usable.
+if [ "${#missing[@]}" -gt 0 ]; then
+  if [ "$CONFIGURATION" = "Release" ]; then
+    echo "error: missing helpers, run scripts/build-helpers.sh first: ${missing[*]}"
+    exit 1
+  fi
+  echo "warning: missing helpers, jobs needing them will fail until you run scripts/build-helpers.sh: ${missing[*]}"
+fi
 ditto "$source_dir/licenses" "$licenses"
