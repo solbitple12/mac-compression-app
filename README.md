@@ -273,11 +273,14 @@ so `AppModel`'s pre-flight memory and disk checks (previously archive-only)
 cover a media batch too, with its own paused-job restart for video (the only
 kind whose memory estimate changes with step).
 
+A media item's format, quality and metadata are now remembered per kind
+(`MediaChoice`, the same purpose `ArchiveChoice` serves for archives) and
+reused as the default for the next dropped file of that kind, saved back on
+every edit in the batch panel.
+
 Still ahead: clip preview has no UI yet (`VideoPreview` exists in `TampCore`
 but nothing in `App/Tamp` shows a before/after player); the batch panel has
 no custom quality or bitrate controls, only the four presets and Lossless;
-a media item's format, quality and metadata choices aren't remembered between
-launches the way `SettingsStore` remembers an archive's; and the benchmark
-pass that Phase 2a ran for archive formats hasn't reached the speed-step and
-RAM-estimate mappings marked as starting points throughout Phase 3 and 4, to
-replace them with real measurements.
+and the benchmark pass that Phase 2a ran for archive formats hasn't reached
+the speed-step and RAM-estimate mappings marked as starting points throughout
+Phase 3 and 4, to replace them with real measurements.
