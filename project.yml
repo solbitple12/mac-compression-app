@@ -42,8 +42,8 @@ targets:
           # No get-task-allow entitlement: notarization rejects it.
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
     # A real Info.plist (rather than GENERATE_INFOPLIST_FILE) so it can declare
-    # CFBundleDocumentTypes: dropping an archive on the Dock icon or Finder's
-    # "Open With" both go through NSApplicationDelegate's application(_:open:).
+    # CFBundleDocumentTypes (Dock drop and "Open With", via application(_:open:))
+    # and NSServices (Finder's right-click Services submenu, via ServicesProvider).
     info:
       path: Generated/Tamp-Info.plist
       properties:
@@ -80,6 +80,13 @@ targets:
               - com.apple.disk-image-udif
             CFBundleTypeExtensions:
               - dmg
+        NSServices:
+          - NSMenuItem:
+              default: Open with Tamp
+            NSMessage: openWithTamp
+            NSSendTypes:
+              - NSFilenamesPboardType
+              - public.file-url
     postBuildScripts:
       - name: Bundle helpers
         script: '"$SRCROOT/scripts/bundle-helpers.sh"'

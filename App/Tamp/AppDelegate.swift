@@ -9,9 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         return AppModel()
     }()
+    private lazy var servicesProvider = ServicesProvider(model: model)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.removeStalePartialFiles()
+        NSApp.servicesProvider = servicesProvider
+        NSUpdateDynamicServices()
         #if DEBUG
         let items = UITestHooks.itemsToAdd
         if !items.isEmpty { model.add(items) }
