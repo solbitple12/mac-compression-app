@@ -5,17 +5,22 @@ struct MainView: View {
     let model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            DropZone(model: model)
-            if !model.mediaItems.isEmpty {
-                MediaBatchView(model: model)
-            } else {
-                Group {
-                    ArchiveSettingsView(model: model)
-                    AdvancedPanel(model: model)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    DropZone(model: model)
+                    if !model.mediaItems.isEmpty {
+                        MediaBatchView(model: model)
+                    } else {
+                        Group {
+                            ArchiveSettingsView(model: model)
+                            AdvancedPanel(model: model)
+                        }
+                        .disabled(isExtracting)
+                        .opacity(isExtracting ? 0.5 : 1)
+                    }
                 }
-                .disabled(isExtracting)
-                .opacity(isExtracting ? 0.5 : 1)
+                .padding(20)
             }
             HStack {
                 Text(destinationText)
@@ -39,10 +44,13 @@ struct MainView: View {
                     .controlSize(.large)
                     .disabled(!model.canStart)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
             Divider()
+                .padding(.top, 12)
             JobListView(model: model)
+                .padding(20)
         }
-        .padding(20)
         .confirmationDialog(
             "Move the originals to the Trash after compressing?",
             isPresented: Binding(get: { model.isConfirmingTrash }, set: { model.isConfirmingTrash = $0 })
