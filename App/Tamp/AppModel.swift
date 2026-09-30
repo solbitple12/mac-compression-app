@@ -371,7 +371,7 @@ final class AppModel {
         passwordConfirmation = ""
         switch action {
         case let .compress(items):
-            guard let engine = registry.engine(for: choice.format) else { return }
+            guard registry.engine(for: choice.format) != nil else { return }
             let request = CompressRequest(
                 items: items,
                 destination: ArchivePlanner.destination(for: items, format: choice.format),
