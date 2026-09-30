@@ -28,11 +28,20 @@ public enum ArchivePlanner {
 
     /// Where a new archive goes: beside the first item, named after it when it's
     /// the only one ("Photos.zip", "report.pdf.zip", as Finder does), else "Archive".
-    /// The engine picks "Name 2.zip" if that name is taken.
-    public static func destination(for items: [URL], format: ArchiveFormat) -> URL {
+    /// The engine picks "Name 2.zip" if that name is taken. `namePattern`, when
+    /// set and non-blank, replaces "{name}" in it with that same base name
+    /// instead of using it directly - "{name}-compressed" makes "Photos" become
+    /// "Photos-compressed.zip".
+    public static func destination(for items: [URL], format: ArchiveFormat, namePattern: String? = nil) -> URL {
         let directory = items.first?.deletingLastPathComponent() ?? FileManager.default.homeDirectoryForCurrentUser
         let baseName = items.count == 1 ? items[0].lastPathComponent : "Archive"
-        return directory.appendingPathComponent("\(baseName).\(format.fileExtension)")
+        let name = outputName(baseName, pattern: namePattern)
+        return directory.appendingPathComponent("\(name).\(format.fileExtension)")
+    }
+
+    private static func outputName(_ baseName: String, pattern: String?) -> String {
+        guard let pattern, !pattern.trimmingCharacters(in: .whitespaces).isEmpty else { return baseName }
+        return pattern.replacingOccurrences(of: "{name}", with: baseName)
     }
 
     /// For the job list, such as “Photos” or “Photos” and 2 more.

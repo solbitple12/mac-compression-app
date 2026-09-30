@@ -15,6 +15,10 @@ public struct ArchiveChoice: Codable, Equatable, Sendable {
     public var volumeMebibytes: Int?
     public var verifies = false
     public var trashesOriginals = false
+    /// Overrides the output's base name when set: "{name}" stands for the
+    /// name `ArchivePlanner.destination` would otherwise use on its own
+    /// ("Photos", "report.pdf"). Nil or blank keeps that default untouched.
+    public var outputNamePattern: String?
 
     public init(format: ArchiveFormat, step: SpeedStep, methods: [ArchiveFormat: CompressionMethod] = [:]) {
         self.format = format
@@ -46,7 +50,7 @@ public struct ArchiveChoice: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case format, step, methods, advanced, threads, excludesMacOSJunk, volumeMebibytes, verifies, trashesOriginals
+        case format, step, methods, advanced, threads, excludesMacOSJunk, volumeMebibytes, verifies, trashesOriginals, outputNamePattern
     }
 
     /// Settings saved by an older Tamp lack the newer keys, which keep their defaults.
@@ -61,6 +65,7 @@ public struct ArchiveChoice: Codable, Equatable, Sendable {
         volumeMebibytes = try? container.decodeIfPresent(Int.self, forKey: .volumeMebibytes)
         verifies = (try? container.decodeIfPresent(Bool.self, forKey: .verifies)) ?? false
         trashesOriginals = (try? container.decodeIfPresent(Bool.self, forKey: .trashesOriginals)) ?? false
+        outputNamePattern = try? container.decodeIfPresent(String.self, forKey: .outputNamePattern)
     }
 }
 

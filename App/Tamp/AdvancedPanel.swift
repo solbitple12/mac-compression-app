@@ -14,6 +14,7 @@ struct AdvancedPanel: View {
                 ForEach(model.advancedOptions, id: \.self) { option in
                     control(for: option)
                 }
+                outputNameSection
                 if model.canSplit { splitControl }
                 if model.canExcludeJunk {
                     Toggle("Leave out Mac-only files (.DS_Store, ._ files)", isOn: bind(\.excludesMacOSJunk))
@@ -126,6 +127,21 @@ struct AdvancedPanel: View {
             }
         case .brotliLargeWindow:
             Toggle("Large window (256 MB)", isOn: bind(\.advanced.brotliLargeWindow))
+        }
+    }
+
+    /// "{name}" stands for the name Tamp would otherwise use on its own
+    /// ("Photos", "report.pdf") - blank keeps that default untouched.
+    private var outputNameSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("Output name", text: Binding(
+                get: { model.choice.outputNamePattern ?? "" },
+                set: { value in model.update { $0.outputNamePattern = value.isEmpty ? nil : value } }
+            ), prompt: Text("{name}"))
+            .accessibilityIdentifier("outputNamePatternField")
+            Text("\"{name}\" stands for Tamp's own name, so \"{name}-compressed\" makes \"Photos\" become \"Photos-compressed.zip\".")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

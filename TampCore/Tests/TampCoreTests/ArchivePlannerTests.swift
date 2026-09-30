@@ -211,6 +211,18 @@ final class ArchivePlannerTests: XCTestCase {
         XCTAssertEqual(ArchivePlanner.destination(for: [report, photos], format: .zip).path, "/Users/me/Documents/Archive.zip")
     }
 
+    func testDestinationAppliesANamePattern() {
+        let photos = URL(fileURLWithPath: "/Users/me/Pictures/Photos", isDirectory: true)
+        XCTAssertEqual(
+            ArchivePlanner.destination(for: [photos], format: .zip, namePattern: "{name}-compressed").path,
+            "/Users/me/Pictures/Photos-compressed.zip"
+        )
+        // Blank, whitespace-only, or nil all keep the plain default name.
+        XCTAssertEqual(ArchivePlanner.destination(for: [photos], format: .zip, namePattern: "").path, "/Users/me/Pictures/Photos.zip")
+        XCTAssertEqual(ArchivePlanner.destination(for: [photos], format: .zip, namePattern: "   ").path, "/Users/me/Pictures/Photos.zip")
+        XCTAssertEqual(ArchivePlanner.destination(for: [photos], format: .zip, namePattern: nil).path, "/Users/me/Pictures/Photos.zip")
+    }
+
     func testDisplayNames() {
         let a = URL(fileURLWithPath: "/x/Photos")
         let b = URL(fileURLWithPath: "/x/notes.txt")

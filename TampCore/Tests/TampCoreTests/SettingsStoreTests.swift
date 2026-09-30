@@ -57,6 +57,7 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set(Data(#"{"format":"sevenZip","step":4}"#.utf8), forKey: SettingsStore.Key.archiveChoice)
         XCTAssertEqual(store.archiveChoice, ArchiveChoice(format: .sevenZip, step: .good))
         XCTAssertEqual(store.archiveChoice.method(for: .sevenZip), .lzma2)
+        XCTAssertNil(store.archiveChoice.outputNamePattern)
     }
 
     func testAdvancedSettingsAreRememberedButNotForEveryFormat() {
@@ -68,9 +69,11 @@ final class SettingsStoreTests: XCTestCase {
         choice.volumeMebibytes = 100
         choice.verifies = true
         choice.trashesOriginals = true
+        choice.outputNamePattern = "{name}-compressed"
         store.archiveChoice = choice
         let restored = SettingsStore(defaults: defaults).archiveChoice
         XCTAssertEqual(restored, choice)
+        XCTAssertEqual(restored.outputNamePattern, "{name}-compressed")
         XCTAssertEqual(restored.options.threads, 2)
         XCTAssertEqual(restored.options.advanced.dictionaryMebibytes, 64)
         XCTAssertEqual(restored.volumeBytes, 100 << 20)

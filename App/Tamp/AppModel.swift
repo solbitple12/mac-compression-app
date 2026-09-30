@@ -404,7 +404,7 @@ final class AppModel {
             guard registry.engine(for: choice.format) != nil else { return }
             let request = CompressRequest(
                 items: items,
-                destination: ArchivePlanner.destination(for: items, format: choice.format),
+                destination: ArchivePlanner.destination(for: items, format: choice.format, namePattern: choice.outputNamePattern),
                 step: choice.step,
                 options: choice.options,
                 password: password,
