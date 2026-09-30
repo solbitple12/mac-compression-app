@@ -92,7 +92,7 @@ public struct ResourceStatus: Equatable, Sendable {
 /// `answerTimeout`, it stops them safely on its own: pausing halts growth but
 /// keeps the memory already held, and only a stop frees it.
 public actor ResourceMonitor {
-    public let policy: ResourcePolicy
+    public private(set) var policy: ResourcePolicy
     private let queue: JobQueue
     private let sampler: any ResourceSampling
     private let clock: @Sendable () -> TimeInterval
@@ -132,6 +132,11 @@ public actor ResourceMonitor {
     }
 
     public var currentStatus: ResourceStatus { status }
+
+    /// Applied from the next tick onward, for a Preferences change made while jobs run.
+    public func updatePolicy(_ newValue: ResourcePolicy) {
+        policy = newValue
+    }
 
     public func updates() -> AsyncStream<ResourceStatus> {
         let token = UUID()

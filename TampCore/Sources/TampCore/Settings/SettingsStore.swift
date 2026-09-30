@@ -106,6 +106,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let archiveChoice = "archiveChoice"
         static let mediaChoice = "mediaChoice"
         static let recommendationGoal = "recommendationGoal"
+        static let safetySettings = "safetySettings"
         static let recentOutputDirectories = "recentOutputDirectories"
         static let unfinishedBatch = "unfinishedBatch"
     }
@@ -139,6 +140,12 @@ public final class SettingsStore: @unchecked Sendable {
             if let newValue { encode(newValue, forKey: Key.recommendationGoal) }
             else { defaults.removeObject(forKey: Key.recommendationGoal) }
         }
+    }
+
+    /// The safety thresholds, in Preferences; unreadable data falls back to the built-in defaults.
+    public var safetySettings: SafetySettings {
+        get { decode(SafetySettings.self, forKey: Key.safetySettings) ?? SafetySettings() }
+        set { encode(newValue, forKey: Key.safetySettings) }
     }
 
     /// The saved choice, with the format swapped for the first available one

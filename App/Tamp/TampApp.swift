@@ -16,5 +16,9 @@ struct TampApp: App {
                     .keyboardShortcut("o")
             }
         }
+
+        Settings {
+            PreferencesView(model: appDelegate.model)
+        }
     }
 }

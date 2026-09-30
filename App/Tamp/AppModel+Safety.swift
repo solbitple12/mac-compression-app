@@ -357,4 +357,14 @@ extension AppModel {
         unfinishedBatch = []
         settings.unfinishedBatch = []
     }
+
+    // MARK: Preferences
+
+    /// Applied right away, including to jobs already running.
+    func updateSafety(_ newValue: SafetySettings) {
+        safety = newValue
+        settings.safetySettings = newValue
+        let monitor = monitor
+        Task { await monitor.updatePolicy(newValue.policy) }
+    }
 }

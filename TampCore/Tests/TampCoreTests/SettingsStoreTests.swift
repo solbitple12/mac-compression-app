@@ -149,6 +149,25 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertNil(store.recommendationGoal)
     }
 
+    func testSafetySettingsStartAtTheBuiltInDefaults() {
+        XCTAssertEqual(store.safetySettings, SafetySettings())
+    }
+
+    func testSafetySettingsAreRemembered() {
+        var settings = SafetySettings()
+        settings.memoryShare = 0.5
+        settings.longJobSeconds = 10 * 60
+        store.safetySettings = settings
+        XCTAssertEqual(SettingsStore(defaults: defaults).safetySettings, settings)
+    }
+
+    func testSafetySettingsSavedBeforeNewerFieldsExistedStillLoad() {
+        defaults.set(Data(#"{"memoryShare":0.5}"#.utf8), forKey: SettingsStore.Key.safetySettings)
+        let settings = store.safetySettings
+        XCTAssertEqual(settings.memoryShare, 0.5)
+        XCTAssertEqual(settings.longJobSeconds, SafetySettings().longJobSeconds)
+    }
+
     func testUnfinishedBatchIsRememberedUntilCleared() {
         XCTAssertEqual(store.unfinishedBatch, [])
         let archives = [URL(fileURLWithPath: "/tmp/a.zip"), URL(fileURLWithPath: "/tmp/b.7z")]

@@ -16,6 +16,19 @@ public struct SafetySettings: Codable, Equatable, Sendable {
     public var policy: ResourcePolicy {
         ResourcePolicy(warningShare: memoryShare, diskReserveBytes: diskReserveBytes, answerTimeout: answerTimeout)
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case longJobSeconds, memoryShare, diskReserveBytes, answerTimeout
+    }
+
+    /// Settings saved by an older Tamp lack newer keys, which keep their defaults.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        longJobSeconds = (try? container.decodeIfPresent(TimeInterval.self, forKey: .longJobSeconds)) ?? 30 * 60
+        memoryShare = (try? container.decodeIfPresent(Double.self, forKey: .memoryShare)) ?? 0.7
+        diskReserveBytes = (try? container.decodeIfPresent(Int64.self, forKey: .diskReserveBytes)) ?? 1 << 30
+        answerTimeout = (try? container.decodeIfPresent(TimeInterval.self, forKey: .answerTimeout)) ?? 60
+    }
 }
 
 /// Checks before a compress job starts: will it fit in memory, and on disk?

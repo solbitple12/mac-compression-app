@@ -103,6 +103,22 @@ final class ResourceMonitorTests: XCTestCase {
         await queue.cancel(id)
     }
 
+    func testUpdatePolicyAppliesFromTheNextTick() async {
+        let id = await startLongJob()
+        var sample = sampler.current
+        sample.freeDiskBytes = ["/": 2 << 30]
+        sampler.current = sample
+        await monitor.tick()
+        var status = await monitor.currentStatus
+        XCTAssertEqual(status.level, .normal)
+
+        await monitor.updatePolicy(ResourcePolicy(diskReserveBytes: 3 << 30))
+        await monitor.tick()
+        status = await monitor.currentStatus
+        XCTAssertEqual(status.level, .critical)
+        await queue.cancel(id)
+    }
+
     func testCriticalPausesAndResumeContinues() async {
         let id = await startLongJob()
         setCritical()

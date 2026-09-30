@@ -60,7 +60,7 @@ final class AppModel {
     var recommendationError: String?
 
     let settings: SettingsStore
-    let safety = SafetySettings()
+    private(set) var safety: SafetySettings
     let queue: JobQueue
     let estimator: Estimator
     let monitor: ResourceMonitor
@@ -86,6 +86,8 @@ final class AppModel {
         // once would each pass their check and then compete for the same memory.
         queue = JobQueue(maxConcurrentJobs: 1)
         choice = settings.archiveChoice(availableFormats: registry.availableFormats)
+        let safety = settings.safetySettings
+        self.safety = safety
         estimator = Estimator(history: .standard)
         monitor = ResourceMonitor(queue: queue, policy: safety.policy)
         unfinishedBatch = settings.unfinishedBatch
