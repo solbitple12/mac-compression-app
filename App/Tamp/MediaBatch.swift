@@ -36,20 +36,29 @@ struct MediaItem: Identifiable, Equatable {
         }
     }
 
-    /// Builds a media item for a dropped file, with a sensible default target
-    /// format from this build's available engines - or nil if the file isn't
-    /// a recognized media source, or this build has no engine for its kind yet.
-    static func make(for url: URL, registry: MediaEngineRegistry) -> MediaItem? {
+    /// Builds a media item for a dropped file: `remembered`'s format and
+    /// quality for its kind when this build can still write that format,
+    /// else `MediaPlanner`'s own default - or nil if the file isn't a
+    /// recognized media source, or this build has no engine for its kind yet.
+    static func make(for url: URL, registry: MediaEngineRegistry, remembered: MediaChoice = MediaChoice()) -> MediaItem? {
         switch MediaPlanner.kind(of: url) {
         case .image:
-            guard let format = MediaPlanner.defaultImageFormat(for: url, available: registry.availableImageFormats) else { return nil }
-            return MediaItem(source: url, target: .image(format), quality: format.isAlwaysLossless ? .lossless : .preset(.high))
+            let available = registry.availableImageFormats
+            guard let format = remembered.imageFormat.flatMap({ available.contains($0) ? $0 : nil })
+                ?? MediaPlanner.defaultImageFormat(for: url, available: available) else { return nil }
+            let quality = remembered.imageQuality ?? (format.isAlwaysLossless ? .lossless : .preset(.high))
+            return MediaItem(source: url, target: .image(format), quality: quality, metadata: remembered.imageMetadata ?? .keep)
         case .audio:
-            guard let format = MediaPlanner.defaultAudioFormat(for: url, available: registry.availableAudioFormats) else { return nil }
-            return MediaItem(source: url, target: .audio(format), quality: format.isAlwaysLossless ? .lossless : .preset(.high))
+            let available = registry.availableAudioFormats
+            guard let format = remembered.audioFormat.flatMap({ available.contains($0) ? $0 : nil })
+                ?? MediaPlanner.defaultAudioFormat(for: url, available: available) else { return nil }
+            let quality = remembered.audioQuality ?? (format.isAlwaysLossless ? .lossless : .preset(.high))
+            return MediaItem(source: url, target: .audio(format), quality: quality, metadata: remembered.audioMetadata ?? .keep)
         case .video:
-            guard let format = MediaPlanner.defaultVideoFormat(available: registry.availableVideoFormats) else { return nil }
-            return MediaItem(source: url, target: .video(format), quality: .preset(.high))
+            let available = registry.availableVideoFormats
+            guard let format = remembered.videoFormat.flatMap({ available.contains($0) ? $0 : nil })
+                ?? MediaPlanner.defaultVideoFormat(available: available) else { return nil }
+            return MediaItem(source: url, target: .video(format), quality: remembered.videoQuality ?? .preset(.high))
         case nil:
             return nil
         }
@@ -61,11 +70,11 @@ enum MediaBatch {
     /// each with its own default format - or nil if any item isn't recognized
     /// media (a folder, an archive, or anything this build has no engine for
     /// yet), which falls back to the existing bundle-into-one-archive flow.
-    static func items(for urls: [URL], registry: MediaEngineRegistry) -> [MediaItem]? {
+    static func items(for urls: [URL], registry: MediaEngineRegistry, remembered: MediaChoice = MediaChoice()) -> [MediaItem]? {
         guard !urls.isEmpty else { return nil }
         var result: [MediaItem] = []
         for url in urls {
-            guard let item = MediaItem.make(for: url, registry: registry) else { return nil }
+            guard let item = MediaItem.make(for: url, registry: registry, remembered: remembered) else { return nil }
             result.append(item)
         }
         return result

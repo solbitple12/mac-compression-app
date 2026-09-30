@@ -191,7 +191,7 @@ final class AppModel {
             return
         }
         // Extension checks only, no disk access, so this can run on the main actor.
-        if let items = MediaBatch.items(for: pendingItems, registry: mediaRegistry) {
+        if let items = MediaBatch.items(for: pendingItems, registry: mediaRegistry, remembered: settings.mediaChoice) {
             mediaItems = items
             isCheckingItems = false
             scheduleMediaEstimate()
@@ -248,7 +248,28 @@ final class AppModel {
     func updateMediaItem(_ id: MediaItem.ID, _ change: (inout MediaItem) -> Void) {
         guard let index = mediaItems.firstIndex(where: { $0.id == id }) else { return }
         change(&mediaItems[index])
+        saveMediaChoice(mediaItems[index])
         scheduleMediaEstimate()
+    }
+
+    /// Remembers this item's format, quality and metadata for its kind, the
+    /// way `select(format:)` and `select(step:)` save `choice` for archives.
+    private func saveMediaChoice(_ item: MediaItem) {
+        var choice = settings.mediaChoice
+        switch item.target {
+        case let .image(format):
+            choice.imageFormat = format
+            choice.imageQuality = item.quality
+            choice.imageMetadata = item.metadata
+        case let .audio(format):
+            choice.audioFormat = format
+            choice.audioQuality = item.quality
+            choice.audioMetadata = item.metadata
+        case let .video(format):
+            choice.videoFormat = format
+            choice.videoQuality = item.quality
+        }
+        settings.mediaChoice = choice
     }
 
     /// Probes each pending media item's peak memory (video's probe reads the
