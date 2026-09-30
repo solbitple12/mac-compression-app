@@ -191,18 +191,20 @@ struct SpeedSlider: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Slider(
-                value: Binding(
-                    get: { Double(step.rawValue) },
-                    set: { step = SpeedStep(rawValue: Int($0.rounded())) ?? step }
-                ),
-                in: 0...Self.lastIndex,
-                step: 1
-            ) {
+            HStack(spacing: 12) {
                 Text("Speed")
+                Slider(
+                    value: Binding(
+                        get: { Double(step.rawValue) },
+                        set: { step = SpeedStep(rawValue: Int($0.rounded())) ?? step }
+                    ),
+                    in: 0...Self.lastIndex,
+                    step: 1
+                )
+                .accessibilityLabel("Speed")
+                .accessibilityValue("\(step.title), \(step.summary)")
+                .accessibilityIdentifier("speedSlider")
             }
-            .accessibilityValue("\(step.title), \(step.summary)")
-            .accessibilityIdentifier("speedSlider")
 
             HStack(spacing: 0) {
                 ForEach(Self.steps, id: \.self) { candidate in
