@@ -170,7 +170,7 @@ struct PasswordPrompt: View {
                     .disabled(password.isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 360)
+        .padding(SheetLayout.padding)
+        .frame(width: SheetLayout.compact)
     }
 }

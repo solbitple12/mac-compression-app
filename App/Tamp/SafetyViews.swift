@@ -66,8 +66,8 @@ struct StartQuestionView: View {
                 buttons(continueTitle: "Continue Anyway", approval: .disk)
             }
         }
-        .padding(20)
-        .frame(width: 420, alignment: .leading)
+        .padding(SheetLayout.padding)
+        .frame(width: SheetLayout.standard, alignment: .leading)
     }
 
     private func buttons(continueTitle: String, approval: AppModel.StartApproval) -> some View {
@@ -115,8 +115,8 @@ struct PausedJobsView: View {
                     .accessibilityIdentifier("resumePaused")
             }
         }
-        .padding(20)
-        .frame(width: 440, alignment: .leading)
+        .padding(SheetLayout.padding)
+        .frame(width: SheetLayout.wide, alignment: .leading)
     }
 
     /// "Restart at Fast, 2 threads" for an archive job, "Restart at Fast" for

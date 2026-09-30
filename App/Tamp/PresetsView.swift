@@ -58,8 +58,8 @@ private struct SavePresetView: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 320)
+        .padding(SheetLayout.padding)
+        .frame(width: SheetLayout.compact)
         .onAppear { isFocused = true }
     }
 

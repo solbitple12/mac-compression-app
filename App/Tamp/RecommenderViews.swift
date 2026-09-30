@@ -20,8 +20,8 @@ struct GoalPickerView: View {
             Button("Cancel", role: .cancel) { model.dismissGoalPicker() }
                 .keyboardShortcut(.cancelAction)
         }
-        .padding(20)
-        .frame(width: 320)
+        .padding(SheetLayout.padding)
+        .frame(width: SheetLayout.compact)
     }
 }
 
@@ -56,7 +56,7 @@ struct RecommendationCardView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
-        .frame(width: 380)
+        .padding(SheetLayout.padding)
+        .frame(width: SheetLayout.standard)
     }
 }
