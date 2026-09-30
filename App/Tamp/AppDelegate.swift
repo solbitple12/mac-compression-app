@@ -23,6 +23,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    /// Files dropped on the Dock icon, opened with "Open With Tamp", or passed
+    /// on the command line: added to the drop zone exactly like a Finder drop.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        model.add(urls)
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows { window.makeKeyAndOrderFront(nil) }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let running = model.activeJobCount
         guard running > 0 else { return .terminateNow }

@@ -28,9 +28,6 @@ targets:
       base:
         PRODUCT_NAME: Tamp
         PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.Tamp
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Tamp
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         # Developer ID outside the App Store: hardened runtime on, no sandbox.
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
@@ -44,6 +41,45 @@ targets:
         Release:
           # No get-task-allow entitlement: notarization rejects it.
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    # A real Info.plist (rather than GENERATE_INFOPLIST_FILE) so it can declare
+    # CFBundleDocumentTypes: dropping an archive on the Dock icon or Finder's
+    # "Open With" both go through NSApplicationDelegate's application(_:open:).
+    info:
+      path: Generated/Tamp-Info.plist
+      properties:
+        CFBundleDisplayName: Tamp
+        LSApplicationCategoryType: public.app-category.utilities
+        LSMinimumSystemVersion: "14.0"
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Archive
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.zip-archive
+            CFBundleTypeExtensions:
+              - zip
+              - 7z
+              - tar
+              - gz
+              - bz2
+              - xz
+              - zst
+              - lz4
+              - lz
+              - br
+              - zpaq
+              - aar
+              - rar
+              - cab
+              - iso
+              - cpio
+          - CFBundleTypeName: Disk Image
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.apple.disk-image-udif
+            CFBundleTypeExtensions:
+              - dmg
     postBuildScripts:
       - name: Bundle helpers
         script: '"$SRCROOT/scripts/bundle-helpers.sh"'
