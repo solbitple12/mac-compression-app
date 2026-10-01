@@ -51,7 +51,7 @@ struct JobRow: View {
     let model: AppModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        let row = HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(job.displayTitle)
                     .lineLimit(1)
@@ -63,6 +63,13 @@ struct JobRow: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
+        // Lets a finished job's output be dragged straight into another app
+        // or Finder window, not just opened via "Show in Finder".
+        if job.state == .finished, let output = job.output {
+            row.draggable(output)
+        } else {
+            row
+        }
     }
 
     @ViewBuilder

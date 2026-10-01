@@ -109,6 +109,7 @@ final class AppModel {
         observeResources()
         loadPresets()
         loadRecentJobs()
+        loadRecentFormats()
     }
 
     // MARK: Format and speed
@@ -192,6 +193,38 @@ final class AppModel {
     func clearRecentJobs() {
         recentJobs = []
         settings.recentJobs = []
+    }
+
+    // MARK: Recent formats
+
+    /// Formats a compress job actually ran with, most recent first, for the
+    /// format picker's "Recent" section.
+    private(set) var recentFormats: [ArchiveFormat] = []
+
+    func loadRecentFormats() {
+        recentFormats = settings.recentFormats
+    }
+
+    /// Saves the Recent list as a CSV file: title, output path, finished date.
+    func exportRecentJobsHistory() {
+        guard !recentJobs.isEmpty else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Tamp Recent Jobs.csv"
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let jobs = self?.recentJobs else { return }
+            let formatter = ISO8601DateFormatter()
+            var csv = "Title,Output,Finished At\n"
+            for job in jobs {
+                csv += "\(Self.csvField(job.title)),\(Self.csvField(job.output.path)),\(formatter.string(from: job.finishedAt))\n"
+            }
+            try? csv.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Quotes a CSV field only when it needs it, doubling any quotes inside.
+    private static func csvField(_ value: String) -> String {
+        guard value.contains(",") || value.contains("\"") || value.contains("\n") else { return value }
+        return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 
     // MARK: Advanced settings
@@ -415,6 +448,8 @@ final class AppModel {
         switch action {
         case let .compress(items):
             guard registry.engine(for: choice.format) != nil else { return }
+            settings.noteFormatUsed(choice.format)
+            recentFormats = settings.recentFormats
             let request = CompressRequest(
                 items: items,
                 destination: ArchivePlanner.destination(for: items, format: choice.format, namePattern: choice.outputNamePattern),

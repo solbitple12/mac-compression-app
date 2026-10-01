@@ -171,6 +171,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let presets = "presets"
         static let recentOutputDirectories = "recentOutputDirectories"
         static let recentJobs = "recentJobs"
+        static let recentFormats = "recentFormats"
         static let unfinishedBatch = "unfinishedBatch"
     }
 
@@ -178,6 +179,8 @@ public final class SettingsStore: @unchecked Sendable {
     public static let recentDirectoryLimit = 20
     /// How many finished jobs are kept for the Recent menu.
     public static let recentJobLimit = 20
+    /// How many formats show in the format picker's "Recent" section.
+    public static let recentFormatLimit = 3
 
     private let defaults: UserDefaults
 
@@ -253,6 +256,19 @@ public final class SettingsStore: @unchecked Sendable {
         var jobs = recentJobs
         jobs.insert(RecentJob(title: title, output: output), at: 0)
         recentJobs = Array(jobs.prefix(Self.recentJobLimit))
+    }
+
+    /// Formats a compress job actually ran with, most recent first, for the
+    /// format picker's "Recent" section.
+    public var recentFormats: [ArchiveFormat] {
+        get { decode([ArchiveFormat].self, forKey: Key.recentFormats) ?? [] }
+        set { encode(newValue, forKey: Key.recentFormats) }
+    }
+
+    public func noteFormatUsed(_ format: ArchiveFormat) {
+        var formats = recentFormats.filter { $0 != format }
+        formats.insert(format, at: 0)
+        recentFormats = Array(formats.prefix(Self.recentFormatLimit))
     }
 
     /// Archives a stopped batch hadn't started, so Resume can pick up where it

@@ -23,6 +23,7 @@ struct RecentJobsMenu: View {
                 }
             }
             Divider()
+            Button("Export History…") { model.exportRecentJobsHistory() }
             Button("Clear Recent") { model.clearRecentJobs() }
         }
         .fixedSize()

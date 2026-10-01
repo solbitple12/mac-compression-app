@@ -220,4 +220,18 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.recentJobs.count, SettingsStore.recentJobLimit)
         XCTAssertEqual(store.recentJobs.first?.title, "Job 29")
     }
+
+    func testRecentFormatsAreRememberedNewestFirstDedupedAndCapped() {
+        XCTAssertEqual(store.recentFormats, [])
+        store.noteFormatUsed(.zip)
+        store.noteFormatUsed(.sevenZip)
+        store.noteFormatUsed(.zip)
+        // Using zip again moves it back to the front rather than appearing twice.
+        XCTAssertEqual(SettingsStore(defaults: defaults).recentFormats, [.zip, .sevenZip])
+
+        store.noteFormatUsed(.tarZst)
+        store.noteFormatUsed(.tarXz)
+        XCTAssertEqual(store.recentFormats.count, SettingsStore.recentFormatLimit)
+        XCTAssertEqual(store.recentFormats, [.tarXz, .tarZst, .zip])
+    }
 }

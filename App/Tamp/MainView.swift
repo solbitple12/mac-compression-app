@@ -205,6 +205,14 @@ struct ArchiveSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Picker("Format", selection: Binding(get: { model.choice.format }, set: { model.select(format: $0) })) {
+                let recentFormats = model.recentFormats.filter { model.registry.availableFormats.contains($0) }
+                if !recentFormats.isEmpty {
+                    Section("Recent") {
+                        ForEach(recentFormats, id: \.self) { format in
+                            Text(format.title).tag(format)
+                        }
+                    }
+                }
                 ForEach(FormatGroup.allCases, id: \.self) { group in
                     let formats = model.registry.availableFormats.filter { $0.group == group }
                     if !formats.isEmpty {
