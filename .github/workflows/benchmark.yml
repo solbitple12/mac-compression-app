@@ -1,0 +1,47 @@
+name: Benchmark
+
+# Time, size and peak memory of every format at every speed step, and thread
+# scaling, on the seeded set from scripts/make-bench-set.sh. It takes about half
+# an hour of a Mac runner, so it runs by hand or when a pull request is labeled
+# "benchmark".
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  benchmark:
+    name: Benchmark
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'benchmark'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore built helpers
+        uses: actions/cache@v4
+        with:
+          path: build/helpers
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
+      - name: Build helpers
+        run: scripts/build-helpers.sh
+      - name: Build tamp-bench
+        run: swift build --package-path TampCore -c release --product tamp-bench
+      - name: Make the benchmark set
+        run: scripts/make-bench-set.sh build/bench-set
+      - name: Run
+        env:
+          TAMP_HELPERS_DIR: ${{ github.workspace }}/build/helpers/bin
+        run: |
+          mkdir -p build/bench
+          "$(swift build --package-path TampCore -c release --show-bin-path)/tamp-bench" \
+            --input build/bench-set --json build/bench/results.json --markdown build/bench/results.md
+          cat build/bench/results.md >> "$GITHUB_STEP_SUMMARY"
+          # For reading the results from the log.
+          echo "BENCH-JSON-BEGIN"
+          cat build/bench/results.json
+          echo "BENCH-JSON-END"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark
+          path: build/bench

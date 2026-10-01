@@ -1,0 +1,175 @@
+name: CI
+
+# Every push to a pull request runs one job: build and test TampCore, then build
+# and launch the app. The UI smoke test and the release dry run cost as much again,
+# so they run on main, or on a pull request labeled "full-ci".
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    # Notes and docs alone don't need a Mac.
+    paths-ignore: ["**.md", "docs/**"]
+
+concurrency:
+  # Labeling a pull request mustn't cancel the build of its latest push.
+  group: ci-${{ github.ref }}-${{ github.event.label.name || 'push' }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
+    runs-on: macos-15
+    # A hung step mustn't burn Mac minutes until GitHub's six-hour limit.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: swift --version
+      - name: Restore built helpers
+        id: helpers
+        uses: actions/cache/restore@v4
+        with:
+          path: build/helpers
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
+      - name: Build helpers
+        run: scripts/build-helpers.sh
+      # Saved right away rather than at the end, so a failing test doesn't cost the
+      # next run another few minutes of rebuilding the helpers.
+      - name: Save built helpers
+        if: steps.helpers.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/helpers
+          key: ${{ steps.helpers.outputs.cache-primary-key }}
+      - name: Build and test TampCore
+        env:
+          TAMP_HELPERS_DIR: ${{ github.workspace }}/build/helpers/bin
+          TAMP_REQUIRE_HELPERS: "1"
+        run: swift test --package-path TampCore
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Build Tamp
+        run: >
+          xcodebuild -project Tamp.xcodeproj -scheme Tamp -configuration Debug
+          -destination 'platform=macOS' -derivedDataPath build/DerivedData build
+      - name: Check the bundle
+        run: |
+          source scripts/helper-list.sh
+          app=build/DerivedData/Build/Products/Debug/Tamp.app
+          for tool in "${TAMP_HELPERS[@]}"; do
+            test -x "$app/Contents/Helpers/$tool"
+            codesign --verify --strict "$app/Contents/Helpers/$tool"
+          done
+          ls "$app/Contents/Resources/Licenses"
+          for license in "${TAMP_LICENSES[@]}"; do
+            test -s "$app/Contents/Resources/Licenses/$license"
+          done
+          test -x "$app/Contents/PlugIns/TampQuickAction.appex/Contents/MacOS/TampQuickAction"
+          codesign --verify --strict "$app/Contents/PlugIns/TampQuickAction.appex"
+          codesign --verify --deep --strict --verbose=2 "$app"
+      - name: Launch Tamp
+        run: |
+          app=build/DerivedData/Build/Products/Debug/Tamp.app
+          "$app/Contents/MacOS/Tamp" &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            status=0; wait "$pid" || status=$?
+            echo "Tamp exited during launch with status $status"; exit 1
+          fi
+          kill "$pid"
+
+  ui-smoke:
+    name: UI smoke test
+    # Opt-in on pull requests; adding some other label doesn't run it again.
+    if: github.event_name == 'push' || (contains(github.event.pull_request.labels.*.name, 'full-ci') && (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore built helpers
+        uses: actions/cache@v4
+        with:
+          path: build/helpers
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
+      - name: Build helpers
+        run: scripts/build-helpers.sh
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Allow UI automation
+        run: sudo automationmodetool enable-automationmode-without-authentication
+      - name: Make the folder to compress
+        # The test corpus plus what git can't hold: an empty folder, a script
+        # with its executable bit and a symlink. /tmp needs no privacy approval.
+        run: |
+          rm -rf /tmp/tamp-ui
+          mkdir -p /tmp/tamp-ui
+          cp -R TampCore/Tests/TampCoreTests/Corpus /tmp/tamp-ui/Project
+          mkdir "/tmp/tamp-ui/Project/documents/empty folder" /tmp/tamp-ui/Project/tools
+          printf '#!/bin/sh\necho hello\n' >/tmp/tamp-ui/Project/tools/run.sh
+          chmod 755 /tmp/tamp-ui/Project/tools/run.sh
+          ln -s run.sh /tmp/tamp-ui/Project/tools/latest
+      - name: Compress and extract through the window
+        env:
+          TEST_RUNNER_TAMP_UI_FIXTURE: /tmp/tamp-ui
+        run: >
+          xcodebuild -project Tamp.xcodeproj -scheme Tamp -configuration Debug
+          -destination 'platform=macOS' -derivedDataPath build/DerivedData
+          -resultBundlePath build/UITests.xcresult test
+      - name: Check the files on disk
+        run: |
+          ls -la /tmp/tamp-ui
+          test -s /tmp/tamp-ui/Project.tar.zst
+          # The extracted copy lands beside the original as "Project 2".
+          diff -r /tmp/tamp-ui/Project "/tmp/tamp-ui/Project 2"
+          test -x "/tmp/tamp-ui/Project 2/tools/run.sh"
+          test "$(readlink "/tmp/tamp-ui/Project 2/tools/latest")" = run.sh
+          test -d "/tmp/tamp-ui/Project 2/documents/empty folder"
+          echo "The extracted folder matches the original."
+      - name: Export the screenshots
+        if: always()
+        # Printed as base64 too, so they can be read from the log.
+        run: |
+          test -d build/UITests.xcresult || exit 0
+          mkdir -p build/screenshots
+          xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots
+          jq -r '.[].attachments[] | "\(.exportedFileName)\t\(.suggestedHumanReadableName)"' build/screenshots/manifest.json \
+            || cat build/screenshots/manifest.json
+          for png in build/screenshots/*.png; do
+            jpg="${png%.png}.jpg"
+            sips -Z 1100 -s format jpeg -s formatOptions 70 "$png" --out "$jpg" >/dev/null
+            echo "SCREENSHOT-BEGIN $(basename "$png")"
+            base64 -i "$jpg" -b 2000
+            echo "SCREENSHOT-END"
+          done
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-screenshots
+          path: build/screenshots
+          if-no-files-found: ignore
+
+  release-dry-run:
+    name: Release dry run
+    # Opt-in on pull requests; adding some other label doesn't run it again.
+    if: github.event_name == 'push' || (contains(github.event.pull_request.labels.*.name, 'full-ci') && (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore built helpers
+        uses: actions/cache@v4
+        with:
+          path: build/helpers
+          key: helpers-${{ runner.os }}-${{ hashFiles('scripts/build-helpers.sh', 'scripts/patches/**') }}
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build a Release app and run the notarization checks
+        run: scripts/release.sh --dry-run

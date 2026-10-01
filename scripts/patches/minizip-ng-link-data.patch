@@ -1,0 +1,22 @@
+# Tamp: link targets become the entry data, so 7-Zip restores zstd ZIP links.
+--- a/mz_zip_rw.c
++++ b/mz_zip_rw.c
+@@ -1696,9 +1696,16 @@
+     }
+ 
+     if (is_symlink && writer->store_links) {
++        /* Store the link's target as the entry's data, the Info-ZIP way, so that
++           7-Zip and unzip restore the link too, not just minizip. */
+         err = mz_os_read_symlink(path, link_path, sizeof(link_path));
+-        if (err == MZ_OK)
+-            file_info.linkname = link_path;
++        if (err == MZ_OK) {
++            stream = mz_stream_mem_create();
++            if (!stream)
++                return MZ_MEM_ERROR;
++            mz_stream_mem_set_buffer(stream, link_path, (int32_t)strlen(link_path));
++            err = mz_stream_mem_open(stream, NULL, MZ_OPEN_MODE_READ);
++        }
+     } else if (mz_os_is_dir(path) != MZ_OK) {
+         uint32_t mode = MZ_OPEN_MODE_READ;
+         stream = mz_stream_os_create();

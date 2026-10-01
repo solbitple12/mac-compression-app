@@ -1,0 +1,15 @@
+# Tamp: "-key -" reads the password from the first line of stdin, so it never appears in the process list.
+--- a/zpaq.cpp
++++ b/zpaq.cpp
+@@ -1242,6 +1242,11 @@
+     else if (opt=="-index" && i<argc-1) index=argv[++i];
+     else if (opt=="-key" && i<argc-1) {
+       libzpaq::SHA256 sha256;
++      if (!strcmp(argv[i+1], "-")) {  // Tamp: "-key -" reads the first line of stdin
++        ++i;
++        for (int c; (c=getchar())!=EOF && c!='\n';) sha256.put(c);
++      }
++      else
+       for (const char* p=argv[++i]; *p; ++p) sha256.put(*p);
+       memcpy(password_string, sha256.result(), 32);
+       password=password_string;

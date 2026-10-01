@@ -1,0 +1,152 @@
+# XcodeGen spec for the Tamp app. Generate the project with `xcodegen generate`;
+# Tamp.xcodeproj is not committed.
+name: Tamp
+options:
+  bundleIdPrefix: io.github.solbitple12
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  TampCore:
+    path: TampCore
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Tamp:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/Tamp
+    dependencies:
+      - package: TampCore
+        product: TampCore
+      - target: TampQuickAction
+        embed: true
+        codeSign: true
+    settings:
+      base:
+        PRODUCT_NAME: Tamp
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.Tamp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Developer ID outside the App Store: hardened runtime on, no sandbox.
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        # Signs for this Mac only by default. scripts/release.sh passes the
+        # Developer ID identity and team instead (docs/signing-and-notarization.md).
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        # The helper script reads build/helpers, outside the sandboxed script inputs.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        Release:
+          # No get-task-allow entitlement: notarization rejects it.
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    # A real Info.plist (rather than GENERATE_INFOPLIST_FILE) so it can declare
+    # CFBundleDocumentTypes (Dock drop and "Open With", via application(_:open:))
+    # and NSServices (Finder's right-click Services submenu, via ServicesProvider).
+    info:
+      path: Generated/Tamp-Info.plist
+      properties:
+        CFBundleDisplayName: Tamp
+        CFBundleIconName: AppIcon
+        LSApplicationCategoryType: public.app-category.utilities
+        LSMinimumSystemVersion: "14.0"
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Archive
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.zip-archive
+            CFBundleTypeExtensions:
+              - zip
+              - 7z
+              - tar
+              - gz
+              - bz2
+              - xz
+              - zst
+              - lz4
+              - lz
+              - br
+              - zpaq
+              - aar
+              - rar
+              - cab
+              - iso
+              - cpio
+          - CFBundleTypeName: Disk Image
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.apple.disk-image-udif
+            CFBundleTypeExtensions:
+              - dmg
+        NSServices:
+          - NSMenuItem:
+              default: Open with Tamp
+            NSMessage: openWithTamp
+            NSSendTypes:
+              - NSFilenamesPboardType
+              - public.file-url
+    postBuildScripts:
+      - name: Bundle helpers
+        script: '"$SRCROOT/scripts/bundle-helpers.sh"'
+        basedOnDependencyAnalysis: false
+    scheme:
+      testTargets:
+        - TampUITests
+  # Finder's Quick Actions (right-click, Preview pane, Touch Bar): a thin,
+  # sandboxed Action Extension that only collects the selected file URLs and
+  # hands them to the main app via NSWorkspace, the same way Dock drop and
+  # Open With do (AppDelegate.application(_:open:)). The actual compress or
+  # extract job always runs in Tamp itself, never in this short-lived process.
+  TampQuickAction:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: App/TampQuickAction
+    settings:
+      base:
+        PRODUCT_NAME: TampQuickAction
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.Tamp.QuickAction
+        ENABLE_HARDENED_RUNTIME: YES
+        # App Extensions are always sandboxed; unlike the main app, this isn't optional.
+        ENABLE_APP_SANDBOX: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_ENTITLEMENTS: App/TampQuickAction/TampQuickAction.entitlements
+      configs:
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    info:
+      path: Generated/TampQuickAction-Info.plist
+      properties:
+        CFBundleDisplayName: Compress with Tamp
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ActionRequestHandler
+          NSExtensionAttributes:
+            NSExtensionServiceAllowsFinderPreviewItem: true
+            NSExtensionServiceFinderPreviewLabel: Compress with Tamp
+            NSExtensionServiceRoleType: NSExtensionServiceRoleTypeEditor
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 100000
+              NSExtensionActivationSupportsFolderWithMaxCount: 100000
+  TampUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: App/TampUITests
+    dependencies:
+      - target: Tamp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.solbitple12.TampUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Tamp
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
